@@ -591,6 +591,13 @@ class GamesPage:
         up.lay.addWidget(label(T("Scegli l'upscaling nel profilo del gioco (Profili o Shift+F2): 77% ultra qualità, "
                                  "67% qualità, 59% bilanciato, 50% prestazioni. Vale dal prossimo avvio."),
                                8.5, P["DIM"], wrap=True))
+        self.auto_run = QCheckBox()
+        self.auto_run.setChecked(bool(common.load_config().get("launcher", {}).get("auto")))
+        self.auto_run.toggled.connect(self.toggle_auto_run)
+        up.lay.addWidget(row(T("Automatico in tutti i giochi"), self.auto_run,
+                             T("Mette bc250-run nelle opzioni di avvio di tutti i giochi Steam, Lutris e Heroic, "
+                               "anche quelli che installerai. Le opzioni che hai già restano; mangohud viene tolto "
+                               "se hai disattivato MangoHud. Steam si chiude e riapre da solo per un attimo.")))
         lay.addWidget(up)
 
         mh = Card("MangoHud")
@@ -622,6 +629,36 @@ class GamesPage:
         e = cfg["engine"]
         write_control(e["fps_limit"], e["limit_enabled"], e["enabled"])
         self.win.toast(T("Limite FPS: {v}", v=lim) if lim and en else T("Limite FPS: disattivato"))
+
+    def toggle_auto_run(self, on):
+        if on:
+            msg = T("Steam verrà chiuso e riaperto per scrivere le opzioni di avvio. Se stai giocando, chiudi "
+                    "prima il gioco. Continuo?")
+        else:
+            msg = T("Tolgo bc250-run dalle opzioni di avvio di tutti i giochi (Steam si chiude e riapre). Continuo?")
+        if QMessageBox.question(self.w, "BC-250", msg) != QMessageBox.StandardButton.Yes:
+            self.auto_run.blockSignals(True)
+            self.auto_run.setChecked(not on)
+            self.auto_run.blockSignals(False)
+            return
+        common.update_config(lambda c: c.setdefault("launcher", {}).update(auto=on))
+        self.win.toast(T("Aggiorno le opzioni di avvio…"))
+
+        def work():
+            from . import launchers
+            res = launchers.apply_all(on)
+            n = len(res["steam"]) + len(res["lutris"]) + len(res["heroic"])
+            self.launch_result = T("Opzioni di avvio aggiornate: {n} giochi.", n=n) + \
+                (" " + "; ".join(res["errors"]) if res["errors"] else "")
+        self.launch_result = None
+        threading.Thread(target=work, daemon=True).start()
+
+        def poll():
+            if self.launch_result is None:
+                QTimer.singleShot(500, poll)
+            else:
+                self.win.toast(self.launch_result)
+        QTimer.singleShot(500, poll)
 
     def toggle_mangohud(self, on):
         if on:

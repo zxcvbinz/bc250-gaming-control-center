@@ -429,4 +429,11 @@ EN = {
     'Opzioni di avvio (tutti i giochi)': 'Launch options (any game)',
     'Steam: Proprietà → Opzioni di avvio. Lutris/Heroic: «prefisso del comando» = bc250-run.': 'Steam: Properties → Launch options. Lutris/Heroic: «command prefix» = bc250-run.',
     "Scegli l'upscaling nel profilo del gioco (Profili o Shift+F2): 77% ultra qualità, 67% qualità, 59% bilanciato, 50% prestazioni. Vale dal prossimo avvio.": "Pick the upscaling in the game's profile (Profiles or Shift+F2): 77% ultra quality, 67% quality, 59% balanced, 50% performance. Applies from the next launch.",
+    'Upscaling non attivo: il gioco non è partito con bc250-run': 'Upscaling off: the game was not started with bc250-run',
+    'Automatico in tutti i giochi': 'Automatic in every game',
+    'Mette bc250-run nelle opzioni di avvio di tutti i giochi Steam, Lutris e Heroic, anche quelli che installerai. Le opzioni che hai già restano; mangohud viene tolto se hai disattivato MangoHud. Steam si chiude e riapre da solo per un attimo.': 'Adds bc250-run to the launch options of every Steam, Lutris and Heroic game, including the ones you install later. Your existing options are kept; mangohud is removed if you turned MangoHud off. Steam closes and reopens by itself for a moment.',
+    'Steam verrà chiuso e riaperto per scrivere le opzioni di avvio. Se stai giocando, chiudi prima il gioco. Continuo?': 'Steam will be closed and reopened to write the launch options. If you are playing, close the game first. Continue?',
+    'Tolgo bc250-run dalle opzioni di avvio di tutti i giochi (Steam si chiude e riapre). Continuo?': 'Remove bc250-run from the launch options of every game (Steam closes and reopens). Continue?',
+    'Aggiorno le opzioni di avvio…': 'Updating launch options…',
+    'Opzioni di avvio aggiornate: {n} giochi.': 'Launch options updated: {n} games.',
 }

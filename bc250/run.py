@@ -102,6 +102,7 @@ def main():
         log(f"errore, lancio diretto: {ex!r}")
         cmd, env = args, {}
     os.environ.update(env)
+    os.environ["BC250_RUN"] = "1"   # il servizio sa che il gioco è passato dal lanciatore
     # il percorso dell'app serviva solo a noi: il gioco parte con l'ambiente di prima
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     pp = [x for x in os.environ.get("PYTHONPATH", "").split(":") if x and x != root]

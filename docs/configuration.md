@@ -68,6 +68,8 @@ Desktop notifications (plus an on-screen toast for critical ones).
 | `history.merge_gap_s` | `300` | same game back within this time = same session |
 | `display.vrr_games_only` | `true` | manage VRR per game (see [Profiles](profiles.md#vrr)) |
 | `display.vrr_off_delay_s` | `8` | seconds after the game closes before VRR goes off |
+| `launcher.auto` | `false` | keep `bc250-run` in every game's launch options ([details](graphics.md#automatic-mode-in-detail)) |
+| `display.upscale_filter` / `.upscale_sharpness` | `fsr` / `3` | gamescope filter and sharpness for profiles with `upscale` |
 | `gpu_default.min` / `.max` | `1000` / `1750` | governor range without a profile |
 | `language` | `"it"` | language of the app, overlay and notifications: `it`, `en` (also from the picker at the bottom of the sidebar) |
 | `profiles` | `[]` | see [Profiles](profiles.md) |

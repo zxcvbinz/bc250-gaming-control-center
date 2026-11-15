@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 
-from . import common, gamecfg, health, i18n
+from . import common, gamecfg, health, i18n, launchers
 from .i18n import T
 from .engine import FrameSource, write_control
 from .sensors import Sensors, governor_config, governor_range, governor_set
@@ -305,6 +305,8 @@ class Daemon:
             self.hist.start(game, self.profile["name"] if self.profile else None, self.gap())
         if self.gfx_game != game["name"] or not self.gfx:
             self.gfx_start(game)
+            if self.profile and self.profile.get("upscale") and launchers.launched_with_run(game["pid"]) is False:
+                common.overlay_send("toast:" + T("Upscaling non attivo: il gioco non è partito con bc250-run"))
 
     # ------------------------------------------------------------ impostazioni grafiche
     def gfx_start(self, game):
@@ -380,6 +382,12 @@ class Daemon:
         want = (prof or {}).get("graphics") or {}
         if want:
             apply_graphics(self.hist.db, name, want, self.hist.session)
+
+    def launcher_maintain(self):
+        try:
+            launchers.maintain()
+        except Exception as ex:
+            print("launcher:", repr(ex), file=sys.stderr, flush=True)
 
     def track_session(self, game):
         if game:
@@ -465,6 +473,8 @@ class Daemon:
             self.on_game_change(game)
             self.game_key = key
         self.track_session(game)
+        if self.n % 120 == 0 and self.cfg.get("launcher", {}).get("auto"):
+            threading.Thread(target=self.launcher_maintain, daemon=True).start()
         if self.n % 10 == 0:
             try:
                 self.gfx_check() if game else self.gfx_after_exit()

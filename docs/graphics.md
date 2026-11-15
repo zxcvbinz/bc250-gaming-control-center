@@ -83,8 +83,10 @@ throttling from the session → it lowers the heaviest settings (shadows, volume
 Games without a supported settings file, or where you just want more FPS and less heat, can use
 **resolution upscaling**, which works with every game.
 
-1. Put `bc250-run %command%` in the game's launch options once (Steam: *Properties → Launch options*.
-   Lutris/Heroic: set the *command prefix* to `bc250-run`).
+1. Make games start through the launcher. The plug & play way: **Games & FPS → Launcher and upscaling →
+   Automatic in every game**. It writes `bc250-run` into the launch options of every Steam game and the
+   command prefix of every Lutris and Heroic game, and keeps doing it for games you install later. By hand:
+   `bc250-run %command%` in the Steam launch options, or `bc250-run` as the Lutris/Heroic command prefix.
 2. Choose **FSR upscaling** in the game's profile (Profiles page, Shift+F2 panel, or MCP
    `save_profile` with `upscale`):
 
@@ -106,3 +108,19 @@ Without upscaling in the profile, `bc250-run` starts the game unchanged, so it i
 launch options. It never blocks a launch: on any error it starts the game directly. What it did is logged
 in `~/.local/share/bc250/run.log`. A profile with `opengl: true` also loads the OpenGL FPS engine
 (like `bc250-gl`).
+
+### Automatic mode, in detail
+
+- **Steam** keeps launch options in `userdata/<id>/config/localconfig.vdf` and rewrites that file when it
+  quits, so the file can only be edited while Steam is closed. When you turn the option on (or off), the app
+  closes Steam with `steam -shutdown`, edits the file and reopens Steam with the same arguments. This takes a
+  few seconds.
+- **Existing options are kept.** `bc250-run` goes right before `%command%`, after any variables
+  (`PROTON_USE_WINED3D=1 bc250-run %command% -skip_intro`). If MangoHud is turned off in the app, a plain
+  `mangohud %command%` becomes `bc250-run %command%`.
+- **New games:** every minute, while Steam is closed, the daemon adds `bc250-run` to newly installed games
+  that have no options of their own. Lutris and Heroic are kept up to date at any time.
+- **Lutris** entries that are Steam games are skipped: they already go through Steam's launch options.
+- If a profile asks for upscaling but the game did not start through `bc250-run`, a toast tells you.
+- Every edited file is backed up first in `~/.local/share/bc250/backups/launchers/`. Turning the option off
+  removes `bc250-run` everywhere.

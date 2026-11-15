@@ -60,7 +60,8 @@ babysitting. This app keeps an eye on it while you play and lets you tune each g
   launch, records changes you make while playing as marks in the session, and applies settings from the
   game profile when the game closes, with backups. An AI assistant can tune them through MCP.
   → [In-game graphics settings](docs/graphics.md)
-- **FSR upscaling for any game**: with `bc250-run %command%` in the launch options, the game profile can run
+- **FSR upscaling for any game, plug & play**: one switch puts the `bc250-run` launcher in every Steam, Lutris
+  and Heroic game (keeping your options), then the game profile can run
   it at 77/67/59/50 % resolution inside gamescope, upscaled with AMD FSR 1. More FPS and less heat on the
   BC-250's single fan. → [Upscaling](docs/graphics.md#upscaling-for-any-game-bc250-run)
 - **Real GPU clock for every tool on 8-core boards**: after the 8-core unlock the SMU metrics table
