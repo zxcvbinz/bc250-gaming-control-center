@@ -63,6 +63,20 @@ babysitting. This app keeps an eye on it while you play and lets you tune each g
   <img src="docs/overlay.png" width="860" alt="Overlay settings with live preview">
 </p>
 
+## Documentation
+
+Full docs live in [`docs/`](docs/README.md):
+
+- [Installation](docs/installation.md): requirements, installer steps, launch options, uninstall
+- [Overlay](docs/overlay.md): the four HUD styles, smart bubble rules, full ring, Shift+F2 panel
+- [Game profiles](docs/profiles.md): matching, FPS limit priority, heat guard, VRR, GPU clock
+- [Session history](docs/history.md): what is recorded and how sessions survive alt+tab
+- [Real GPU clock on 8-core boards](docs/gpu-clock-8core.md): why tools show 10 MHz and how it is fixed
+- [MCP server](docs/mcp.md): tools for AI assistants
+- [Configuration reference](docs/configuration.md): every setting, file and command
+- [Architecture](docs/architecture.md): how the pieces fit, shared-memory format, source map
+- [Troubleshooting](docs/troubleshooting.md)
+
 ## How it works
 
 | Component | What it does |
