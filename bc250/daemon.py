@@ -34,24 +34,66 @@ class History:
             CREATE INDEX IF NOT EXISTS samples_session ON samples(session, t);
         """)
         self.session = None
+        self.current = None     # (nome, appid) del gioco della sessione aperta
+        self.last_seen = 0.0
         self.pending = 0
 
-    def start(self, game, profile):
-        cur = self.db.execute(
-            "INSERT INTO sessions(game, appid, api, profile, start, end) VALUES(?,?,?,?,?,?)",
-            (game["name"], game["appid"], game["api"], profile, time.time(), time.time()))
-        self.session = cur.lastrowid
+    @staticmethod
+    def ident(game):
+        return (game["name"], game.get("appid") or "")
+
+    def start(self, game, profile, gap):
+        """Apre una sessione, o riprende l'ultima se è dello stesso gioco e finita da meno di `gap` s."""
+        now = time.time()
+        name, appid = self.ident(game)
+        last = self.db.execute("SELECT id, game, IFNULL(appid,''), end FROM sessions "
+                               "ORDER BY end DESC LIMIT 1").fetchone()
+        if last and (last[1], last[2]) == (name, appid) and now - last[3] <= gap:
+            self.session = last[0]
+            if profile:
+                self.db.execute("UPDATE sessions SET profile=? WHERE id=?", (profile, self.session))
+        else:
+            cur = self.db.execute(
+                "INSERT INTO sessions(game, appid, api, profile, start, end) VALUES(?,?,?,?,?,?)",
+                (name, game["appid"], game["api"], profile, now, now))
+            self.session = cur.lastrowid
         self.db.commit()
+        self.current = (name, appid)
+        self.last_seen = now
 
     def stop(self):
         if self.session:
-            self.db.execute("UPDATE sessions SET end=? WHERE id=?", (time.time(), self.session))
+            # fine = ultimo frame visto, non il momento in cui ci si accorge che il gioco è sparito
+            end = self.last_seen or time.time()
+            self.db.execute("UPDATE sessions SET end=MAX(end, ?) WHERE id=?", (end, self.session))
             # sessioni più corte di 20 s non servono
             self.db.execute("DELETE FROM samples WHERE session IN (SELECT id FROM sessions "
                             "WHERE id=? AND end-start < 20)", (self.session,))
             self.db.execute("DELETE FROM sessions WHERE id=? AND end-start < 20", (self.session,))
             self.db.commit()
         self.session = None
+        self.current = None
+
+    def merge_split(self, gap):
+        """Unisce le sessioni consecutive dello stesso gioco separate da meno di `gap` s
+        (prima un alt+tab o un caricamento lungo chiudeva la sessione)."""
+        has_marks = self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='marks'").fetchone()
+        prev, merged = None, 0
+        for r in self.db.execute("SELECT id, game, IFNULL(appid,''), profile, start, end FROM sessions "
+                                 "ORDER BY start").fetchall():
+            if prev and (r[1], r[2]) == (prev[1], prev[2]) and r[4] - prev[5] <= gap:
+                self.db.execute("UPDATE samples SET session=? WHERE session=?", (prev[0], r[0]))
+                if has_marks:
+                    self.db.execute("UPDATE marks SET session=? WHERE session=?", (prev[0], r[0]))
+                end, profile = max(prev[5], r[5]), r[3] or prev[3]
+                self.db.execute("UPDATE sessions SET end=?, profile=? WHERE id=?", (end, profile, prev[0]))
+                self.db.execute("DELETE FROM sessions WHERE id=?", (r[0],))
+                prev = (prev[0], prev[1], prev[2], profile, prev[4], end)
+                merged += 1
+            else:
+                prev = r
+        self.db.commit()
+        return merged
 
     def add(self, g, s, gpu_max, throttling):
         if not self.session:
@@ -122,6 +164,9 @@ class Daemon:
         self.guard_t = 0.0
         self.apply_control()
         self.hist.prune(self.cfg["history"]["keep_days"])
+        n = self.hist.merge_split(self.gap())
+        if n:
+            print(f"storico: unite {n} sessioni spezzate", file=sys.stderr, flush=True)
 
     @staticmethod
     def _mtime():
@@ -201,15 +246,25 @@ class Daemon:
             if not self.guard_cut:
                 common.overlay_send("toast:Protezione calore: limite ripristinato")
 
+    def gap(self):
+        return float(self.cfg["history"].get("merge_gap_s", 300))
+
     def on_game_change(self, game):
         self.guard_cut = 0
-        if self.hist.session:
-            self.hist.stop()
         self.apply_profile(game, self.profile)
         self.game = game
+        if not game:
+            return  # la sessione resta aperta: il gioco può tornare (alt+tab, caricamenti)
+        if self.hist.session and self.hist.current != self.hist.ident(game):
+            self.hist.stop()  # è partito un altro gioco
+        if not self.hist.session and self.cfg["history"]["enabled"]:
+            self.hist.start(game, self.profile["name"] if self.profile else None, self.gap())
+
+    def track_session(self, game):
         if game:
-            if self.cfg["history"]["enabled"]:
-                self.hist.start(game, self.profile["name"] if self.profile else None)
+            self.hist.last_seen = time.time()
+        elif self.hist.session and time.time() - self.hist.last_seen > self.gap():
+            self.hist.stop()
 
     # ------------------------------------------------------------ VRR solo nei giochi
     def _set_vrr(self, on):
@@ -288,6 +343,7 @@ class Daemon:
         if key != self.game_key:
             self.on_game_change(game)
             self.game_key = key
+        self.track_session(game)
         self.heat_guard(game, s)
         self.manage_vrr(game)
         throttle = self.gov_cfg.get("throttle")

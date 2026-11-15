@@ -176,7 +176,7 @@ def t_profiles(_):
 
 def t_save_profile(a):
     prof = {k: a[k] for k in ("name", "match", "fps_limit", "gpu_max", "gpu_min", "vrr", "heat_guard",
-                              "hud", "hud_position", "notes") if k in a}
+                              "hud", "hud_position", "hud_style", "notes") if k in a}
 
     def fn(c):
         for i, p in enumerate(c["profiles"]):
@@ -220,6 +220,7 @@ TOOLS = {
                       "vrr": {"type": "boolean", "description": "VRR automatico in questo gioco (schermo nero un attimo all'avvio/chiusura)"},
                       "heat_guard": {"type": ["integer", "null"], "description": "°C CPU oltre cui abbassare il limite FPS di 10 ogni 20 s"},
                       "hud": {"type": "boolean"}, "hud_position": {"type": ["string", "null"]},
+                      "hud_style": {"type": ["string", "null"], "description": "bubble, compact, full o null (globale)"},
                       "notes": {"type": "string"}}, ["name"]),
     "health_check": (t_health, "Controllo salute della BC-250 (servizi, governor, core, ventola, swap, VRR...).", {}),
     "get_config": (t_config, "Configurazione attuale (motore, avvisi, clock GPU di default, overlay).", {}),

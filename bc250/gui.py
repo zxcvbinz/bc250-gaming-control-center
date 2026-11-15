@@ -8,16 +8,17 @@ import threading
 import time
 from collections import deque
 
-from PyQt6.QtCore import QRectF, Qt, QTimer
-from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen
+from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
+from PyQt6.QtGui import QColor, QFont, QIcon, QLinearGradient, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QFrame,
                              QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
                              QListWidget, QListWidgetItem, QMessageBox, QPushButton, QScrollArea,
-                             QSlider, QSpinBox, QStackedWidget, QTableWidget, QTableWidgetItem,
+                             QSlider, QSpinBox, QStackedWidget, QTableWidget, QTableWidgetItem, QTreeWidget, QTreeWidgetItem,
                              QVBoxLayout, QWidget)
 
 from . import common, health
 from .engine import write_control
+from .hudpaint import CENTER, DEMOS, IDLE, STYLES, WATCH, HudPainter, demo_state
 from .install import FLATPAK_GL_APPS, flatpak_gl, flatpak_gl_enabled
 from .sensors import Sensors, governor_set
 
@@ -49,6 +50,11 @@ QSlider::handle:horizontal {{ width:14px; margin:-5px 0; border-radius:7px; back
 QTableWidget {{ background:{P['CARD']}; border:none; gridline-color:{P['BORDER']}; }}
 QHeaderView::section {{ background:{P['CARD2']}; color:{P['MUTED']}; border:none; padding:6px; }}
 QTableWidget::item:selected {{ background:{P['CARD2']}; color:{P['TEXT']}; }}
+QTreeWidget#hist {{ background:{P['SIDEBAR']}; border:none; border-right:1px solid {P['BORDER']};
+    padding:8px 6px; outline:0; }}
+QTreeWidget#hist::item {{ padding:7px 6px; border-radius:8px; margin:1px 0; color:{P['MUTED']}; }}
+QTreeWidget#hist::item:selected {{ background:{P['CARD2']}; color:{P['TEXT']}; }}
+QTreeWidget#hist::item:hover:!selected {{ background:{P['CARD']}; }}
 QScrollArea {{ border:none; }}
 QScrollBar:vertical {{ background:transparent; width:8px; }}
 QScrollBar::handle:vertical {{ background:{P['OFF']}; border-radius:4px; min-height:30px; }}
@@ -680,26 +686,232 @@ POSITIONS = [("In alto a sinistra", "top-left"), ("In alto al centro", "top-cent
              ("In basso al centro", "bottom-center"), ("In basso a destra", "bottom-right")]
 
 
+def draw_scene(p, r, game_hud=True):
+    """Scena di gioco finta, con un HUD di gioco tipico, per capire cosa copre l'overlay."""
+    p.save()
+    p.setClipRect(r, Qt.ClipOperation.IntersectClip)
+    sky = QLinearGradient(r.topLeft(), r.bottomLeft())
+    sky.setColorAt(0, QColor("#16233f"))
+    sky.setColorAt(0.62, QColor("#b8643a"))
+    sky.setColorAt(0.63, QColor("#1b231b"))
+    sky.setColorAt(1, QColor("#0b0e0b"))
+    p.fillRect(r, sky)
+    w, h = r.width(), r.height()
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#f2c27a"))
+    p.drawEllipse(QPointF(r.left() + w * 0.68, r.top() + h * 0.58), h * 0.07, h * 0.07)
+    mount = QPainterPath()
+    mount.moveTo(r.left(), r.top() + h * 0.63)
+    for fx, fy in ((0.08, 0.45), (0.18, 0.56), (0.3, 0.38), (0.45, 0.6), (0.55, 0.5), (0.7, 0.63),
+                   (0.82, 0.44), (0.93, 0.55), (1.0, 0.5)):
+        mount.lineTo(r.left() + w * fx, r.top() + h * fy)
+    mount.lineTo(r.right(), r.top() + h * 0.63)
+    mount.closeSubpath()
+    p.setBrush(QColor("#221a26"))
+    p.drawPath(mount)
+    if not game_hud:
+        p.restore()
+        return
+    # HUD del gioco: missioni, minimappa, barre vita, barra rapida, mirino
+    hud = QColor(255, 255, 255, 120)
+    u = h / 100
+    p.setBrush(QColor(255, 255, 255, 40))
+    p.setPen(QPen(hud, max(1.0, u * 0.3)))
+    p.drawEllipse(QPointF(r.right() - u * 13, r.top() + u * 13), u * 9, u * 9)
+    p.setPen(Qt.PenStyle.NoPen)
+    for i, ww in enumerate((26, 18, 21)):
+        p.setBrush(QColor(255, 255, 255, 70 if i else 110))
+        p.drawRoundedRect(QRectF(r.left() + u * 3, r.top() + u * (4 + i * 3.4), u * ww, u * 2), u, u)
+    for i, (col, ww) in enumerate((("#d9534f", 30), ("#5cb85c", 22))):
+        p.setBrush(QColor(255, 255, 255, 40))
+        p.drawRoundedRect(QRectF(r.left() + u * 3, r.bottom() - u * (9 - i * 3.5), u * 34, u * 2.2), u, u)
+        p.setBrush(QColor(col))
+        p.drawRoundedRect(QRectF(r.left() + u * 3, r.bottom() - u * (9 - i * 3.5), u * ww, u * 2.2), u, u)
+    for i in range(9):
+        p.setBrush(QColor(255, 255, 255, 50))
+        p.drawRoundedRect(QRectF(r.center().x() + u * (i - 4.5) * 6.4, r.bottom() - u * 9, u * 5.6, u * 5.6), u, u)
+    p.setPen(QPen(hud, max(1.0, u * 0.3)))
+    c = r.center()
+    p.drawLine(QPointF(c.x() - u * 2, c.y()), QPointF(c.x() + u * 2, c.y()))
+    p.drawLine(QPointF(c.x(), c.y() - u * 2), QPointF(c.x(), c.y() + u * 2))
+    p.restore()
+
+
+def hud_origin(pos, sw, sh, hw, hh, m):
+    x = m if pos.endswith("left") else sw - m - hw if pos.endswith("right") else (sw - hw) / 2
+    y = sh - m - hh if pos.startswith("bottom") else m
+    return x, y
+
+
+class HudPreview(QWidget):
+    """Anteprima dell'overlay: il tuo schermo in miniatura con l'overlay dove sarà davvero,
+    più l'overlay a grandezza reale. Clic su un punto dello schermo per spostarlo."""
+    MINI_H = 300
+
+    def __init__(self, on_pick):
+        super().__init__()
+        self.on_pick = on_pick
+        self.cfg = common.load_config()
+        self.painter = HudPainter()
+        self.scenario = "auto"
+        self.live = {}
+        self.st = {}
+        scr = QApplication.primaryScreen()
+        g = scr.geometry() if scr else None
+        self.sw, self.sh = (g.width(), g.height()) if g else (1920, 1080)
+        self.mini = QRectF()
+        self.last_upd = 0.0
+        self.last_paint = 0.0
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.tick)
+        self.timer.start(33)
+        self.refresh_state()
+        self.painter.settle()
+        self.fix_height()
+
+    def set_cfg(self, cfg):
+        self.cfg = cfg
+        self.refresh_state()
+        self.fix_height()
+        self.update()
+
+    def set_live(self, st):
+        self.live = st
+
+    def live_game(self):
+        st = self.live
+        return st if st.get("game") and time.time() - st.get("ts", 0) < 5 else None
+
+    def refresh_state(self):
+        live = self.live_game() if self.scenario == "auto" else None
+        self.st = live or demo_state("ok" if self.scenario == "auto" else self.scenario, self.cfg)
+        self.painter.update(self.st, self.cfg)
+
+    def tick(self):
+        if not self.isVisible():
+            return
+        now = time.monotonic()
+        if now - self.last_upd > 0.25:
+            self.last_upd = now
+            self.refresh_state()
+        moving = self.painter.step()
+        if moving or now - self.last_paint > 0.25:
+            self.last_paint = now
+            self.update()
+
+    def mini_rect(self):
+        mw = min(self.width(), self.MINI_H * self.sw / self.sh)
+        return QRectF(0, 0, mw, mw * self.sh / self.sw)
+
+    def strip_h(self):
+        return self.painter.size(self.st, self.cfg, expanded=True)[1] + 40
+
+    def fix_height(self):
+        h = int(self.mini_rect().height() + 30 + 22 + self.strip_h())
+        if self.minimumHeight() != h:
+            self.setMinimumHeight(h)
+
+    def mousePressEvent(self, e):
+        r = self.mini_rect()
+        pt = e.position()
+        if not r.contains(pt):
+            return
+        fx = (pt.x() - r.left()) / r.width()
+        fy = (pt.y() - r.top()) / r.height()
+        col = "left" if fx < 1 / 3 else "right" if fx > 2 / 3 else "center"
+        self.on_pick(("bottom-" if fy > 0.5 else "top-") + col)
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        o = self.cfg["overlay"]
+        pos, m = o.get("position", "top-left"), int(o["margin"])
+        st, cfg = self.st, self.cfg
+        hw, hh = self.painter.size(st, cfg)
+        on = o["hud_visible"] and self.painter.visible(cfg)
+
+        # --- schermo in miniatura, proporzioni vere
+        r = self.mini_rect()
+        self.mini = r
+        draw_scene(p, r)
+        f = r.width() / self.sw
+        x, y = hud_origin(pos, self.sw, self.sh, hw, hh, m)
+        if on:
+            p.save()
+            p.translate(r.left() + x * f, r.top() + y * f)
+            p.scale(f, f)
+            self.painter.paint(p, st, cfg, hw, hh)
+            p.restore()
+            p.setPen(QPen(QColor(P["ACCENT"]), 1, Qt.PenStyle.DashLine))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(QRectF(r.left() + x * f - 3, r.top() + y * f - 3, hw * f + 6, hh * f + 6), 4, 4)
+        p.setPen(QPen(QColor(P["BORDER"]), 1))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6)
+        fnt = QFont()
+        fnt.setPointSizeF(8.5)
+        p.setFont(fnt)
+        p.setPen(QColor(P["MUTED"]))
+        pct = 100 * hw * hh / (self.sw * self.sh)
+        cap = (f"Il tuo schermo {self.sw}×{self.sh}  ·  overlay {hw}×{hh} px, {pct:.2f}% dello schermo"
+               if on else "Overlay nascosto in questo momento") + "  ·  clic sullo schermo per spostarlo"
+        p.drawText(QRectF(0, r.bottom() + 6, self.width(), 18), Qt.AlignmentFlag.AlignLeft, cap)
+
+        # --- grandezza reale
+        y0 = r.bottom() + 30
+        p.setPen(QColor(P["DIM"]))
+        p.drawText(QRectF(0, y0, self.width(), 16), Qt.AlignmentFlag.AlignLeft, "A GRANDEZZA REALE")
+        sr = QRectF(0, y0 + 20, self.width(), self.strip_h())
+        p.save()
+        p.setClipRect(sr)
+        draw_scene(p, QRectF(sr.left(), sr.top() - sr.height() * 0.6, sr.width(), sr.height() * 2.4), False)
+        p.restore()
+        if on:
+            hx = sr.right() - 20 - hw if pos.endswith("right") else \
+                sr.left() + (sr.width() - hw) / 2 if pos.endswith("center") else sr.left() + 20
+            p.save()
+            p.setClipRect(sr)
+            p.translate(hx, sr.top() + (sr.height() - hh) / 2)
+            self.painter.paint(p, st, cfg, hw, hh)
+            p.restore()
+        p.setPen(QPen(QColor(P["BORDER"]), 1))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(sr.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6)
+        p.end()
+
+
 class OverlayPage:
     def __init__(self, win):
         self.win = win
-        self.w, lay = page("Overlay", "HUD minimal sopra i giochi e pannello dettagli in stile Steam.")
+        self.loading = True
+        self.w, lay = page("Overlay", "Cosa vedi sopra i giochi. Con il «cerchio intelligente» resta piccolo "
+                           "in un angolo e si allarga solo quando qualcosa richiede attenzione.")
         o = common.load_config()["overlay"]
-        c = Card("Tasti rapidi")
-        c.lay.addWidget(label(
-            f"<b>Shift+F1</b> <span style='color:{P['MUTED']}'>limite FPS on/off</span> &nbsp;&nbsp; "
-            f"<b>Shift+F2</b> <span style='color:{P['MUTED']}'>pannello dettagli</span> &nbsp;&nbsp; "
-            f"<b>Shift+F3</b> <span style='color:{P['MUTED']}'>mostra/nascondi overlay</span>", 10))
-        c.lay.addWidget(label("Si cambiano in Impostazioni di sistema → Scorciatoie → «BC-250».", 8.5, P["DIM"]))
-        b = QPushButton("Apri pannello dettagli ora")
-        b.clicked.connect(lambda: common.overlay_send("toggle-panel"))
-        c.lay.addWidget(b, 0, Qt.AlignmentFlag.AlignLeft)
-        lay.addWidget(c)
+        b = o["bubble"]
+
+        pc = Card("Anteprima")
+        self.scen = QComboBox()
+        self.scen.addItem("Dati live (se stai giocando)", "auto")
+        for k, t in DEMOS:
+            self.scen.addItem(t, k)
+        self.scen.activated.connect(self.set_scenario)
+        pc.lay.addWidget(row("Simula", self.scen, "Le demo mostrano come reagisce il cerchio, con gli stessi "
+                             "tempi del gioco (si allarga dopo 1-2 s, si richiude dopo la tenuta)."))
+        self.preview = HudPreview(self.pick_position)
+        pc.lay.addWidget(self.preview)
+        lay.addWidget(pc)
 
         a = Card("Aspetto")
         self.visible = QCheckBox()
         self.visible.setChecked(o["hud_visible"])
-        a.lay.addWidget(row("Overlay visibile", self.visible))
+        a.lay.addWidget(row("Overlay attivo", self.visible, "Shift+F3 lo accende e spegne anche in gioco."))
+        self.style = QComboBox()
+        for k, t in STYLES:
+            self.style.addItem(t, k)
+        self.style.setCurrentIndex(max(0, self.style.findData(o.get("style", "bubble"))))
+        a.lay.addWidget(row("Stile", self.style, "Cerchio: solo FPS, si allarga quando serve · Barra: una riga · "
+                            "Completo: grafico e tutte le metriche."))
         self.only = QCheckBox()
         self.only.setChecked(o["only_in_game"])
         a.lay.addWidget(row("Solo mentre giochi", self.only, "Se spento resta sempre visibile sul desktop."))
@@ -707,7 +919,7 @@ class OverlayPage:
         for t, v in POSITIONS:
             self.pos.addItem(t, v)
         self.pos.setCurrentIndex(max(0, self.pos.findData(o["position"])))
-        a.lay.addWidget(row("Posizione", self.pos))
+        a.lay.addWidget(row("Posizione", self.pos, "Un profilo può usare una posizione diversa per quel gioco."))
         self.margin = QSpinBox()
         self.margin.setRange(0, 400)
         self.margin.setSuffix(" px")
@@ -725,33 +937,115 @@ class OverlayPage:
         a.lay.addWidget(row("Opacità sfondo", self.opacity))
         lay.addWidget(a)
 
-        it = Card("Cosa mostrare")
+        self.bcard = Card("Cerchio intelligente")
+        self.center = QComboBox()
+        for k, t in CENTER:
+            self.center.addItem(t, k)
+        self.center.setCurrentIndex(max(0, self.center.findData(b.get("center", "fps"))))
+        self.bcard.lay.addWidget(row("Valore nel cerchio", self.center))
+        self.idle = QComboBox()
+        for k, t in IDLE:
+            self.idle.addItem(t, k)
+        self.idle.setCurrentIndex(max(0, self.idle.findData(b.get("idle", "visible"))))
+        self.bcard.lay.addWidget(row("Quando va tutto bene", self.idle,
+                                     "«Nascosto»: in gioco non vedi niente finché non c'è un problema."))
+        self.hold = QSpinBox()
+        self.hold.setRange(2, 120)
+        self.hold.setSuffix(" s")
+        self.hold.setValue(int(b.get("hold_s", 8)))
+        self.bcard.lay.addWidget(row("Resta allargato per", self.hold, "Dopo che il problema è sparito."))
+        self.bcard.lay.addWidget(label("SI ALLARGA QUANDO", 8, P["MUTED"], True))
+        grid = QGridLayout()
+        self.watch = {}
+        for i, (k, t) in enumerate(WATCH):
+            cb = QCheckBox(t)
+            cb.setChecked(k in b.get("watch", []))
+            self.watch[k] = cb
+            grid.addWidget(cb, i // 2, i % 2)
+        self.bcard.lay.addLayout(grid)
+        self.th = {}
+        for k, text, rng, suf, hint in (
+                ("cpu_temp", "CPU calda da", (60, 100), " °C", None),
+                ("gpu_temp", "GPU calda da", (55, 95), " °C", "Il governor taglia il clock a 85°C."),
+                ("fps_drop_pct", "FPS sotto l'obiettivo", (50, 99), " %", "Percentuale del limite FPS del gioco."),
+                ("fps_min", "Obiettivo senza limite FPS", (20, 165), " FPS", None),
+                ("stutter_pct", "Scatti: 1% low sotto", (20, 90), " % degli FPS", None),
+                ("ram_pct", "RAM piena da", (70, 99), " %", None)):
+            sb = QSpinBox()
+            sb.setRange(*rng)
+            sb.setSuffix(suf)
+            sb.setValue(int(b.get(k, rng[0])))
+            self.th[k] = sb
+            self.bcard.lay.addWidget(row(text, sb, hint))
+        lay.addWidget(self.bcard)
+
+        self.icard = Card("Cosa mostrare (barra e completo)")
         grid = QGridLayout()
         self.items = {}
         for i, (k, t) in enumerate(ITEMS):
             cb = QCheckBox(t)
             cb.setChecked(k in o["items"])
-            cb.toggled.connect(self.save)
             self.items[k] = cb
             grid.addWidget(cb, i // 3, i % 3)
-        it.lay.addLayout(grid)
-        lay.addWidget(it)
-        for w in (self.visible, self.only):
+        self.icard.lay.addLayout(grid)
+        lay.addWidget(self.icard)
+
+        c = Card("Tasti rapidi")
+        c.lay.addWidget(label(
+            f"<b>Shift+F1</b> <span style='color:{P['MUTED']}'>limite FPS on/off</span> &nbsp;&nbsp; "
+            f"<b>Shift+F2</b> <span style='color:{P['MUTED']}'>pannello dettagli</span> &nbsp;&nbsp; "
+            f"<b>Shift+F3</b> <span style='color:{P['MUTED']}'>mostra/nascondi overlay</span>", 10))
+        c.lay.addWidget(label("Si cambiano in Impostazioni di sistema → Scorciatoie → «BC-250».", 8.5, P["DIM"]))
+        bt = QPushButton("Apri pannello dettagli ora")
+        bt.clicked.connect(lambda: common.overlay_send("toggle-panel"))
+        c.lay.addWidget(bt, 0, Qt.AlignmentFlag.AlignLeft)
+        lay.addWidget(c)
+
+        for w in [self.visible, self.only] + list(self.watch.values()) + list(self.items.values()):
             w.toggled.connect(self.save)
-        self.pos.activated.connect(self.save)
-        for w in (self.margin, self.scale, self.opacity):
+        for w in (self.pos, self.style, self.center, self.idle):
+            w.activated.connect(self.save)
+        for w in [self.margin, self.scale, self.opacity, self.hold] + list(self.th.values()):
             w.valueChanged.connect(self.save)
         lay.addStretch()
+        self.loading = False
+        self.sync_cards()
+
+    def sync_cards(self):
+        bubble = self.style.currentData() == "bubble"
+        self.bcard.setVisible(bubble)
+        self.icard.setVisible(not bubble)
+
+    def set_scenario(self, *_):
+        self.preview.scenario = self.scen.currentData()
+        self.preview.refresh_state()
+
+    def pick_position(self, pos):
+        i = self.pos.findData(pos)
+        if i >= 0:
+            self.pos.setCurrentIndex(i)
+            self.save()
 
     def save(self, *_):
+        if self.loading:
+            return
         items = [k for k, _ in ITEMS if self.items[k].isChecked()]
-        common.update_config(lambda c: c["overlay"].update(
-            hud_visible=self.visible.isChecked(), only_in_game=self.only.isChecked(),
-            position=self.pos.currentData(), margin=self.margin.value(),
-            scale=self.scale.value() / 100, opacity=self.opacity.value() / 100, items=items))
+        bub = {"center": self.center.currentData(), "idle": self.idle.currentData(), "hold_s": self.hold.value(),
+               "watch": [k for k, _ in WATCH if self.watch[k].isChecked()],
+               **{k: sb.value() for k, sb in self.th.items()}}
+
+        def fn(c):
+            c["overlay"].update(
+                hud_visible=self.visible.isChecked(), only_in_game=self.only.isChecked(),
+                position=self.pos.currentData(), margin=self.margin.value(), style=self.style.currentData(),
+                scale=self.scale.value() / 100, opacity=self.opacity.value() / 100, items=items)
+            c["overlay"].setdefault("bubble", {}).update(bub)
+        cfg = common.update_config(fn)
+        self.sync_cards()
+        self.preview.set_cfg(cfg)
 
     def refresh(self, st):
-        pass
+        self.preview.set_live(st)
 
 
 class DisplayPage:
@@ -873,18 +1167,31 @@ class HealthPage:
         pass
 
 
+def fmt_dur(sec):
+    m = int(round(sec / 60))
+    return f"{m // 60} h {m % 60:02d} min" if m >= 60 else f"{m} min"
+
+
+def game_title(name):
+    return (name or "?").removesuffix(".exe")
+
+
 class HistoryPage:
     def __init__(self, win):
         self.win = win
-        self.w, lay = page("Storico partite", "Ogni partita viene registrata (FPS, temperature, clock, consumi). "
+        self.w, lay = page("Storico partite", "Partite raggruppate per gioco: scegli un gioco per il riepilogo "
+                           "di tutte le sessioni, o una sessione per il dettaglio. Se esci dal gioco (alt+tab, "
+                           "caricamenti) e torni entro 5 minuti è la stessa sessione. "
                            "I segni viola li aggiunge Claude durante i test.")
         top = QHBoxLayout()
-        self.list = QListWidget()
-        self.list.setObjectName("nav")
-        self.list.setFixedWidth(300)
-        self.list.setMinimumHeight(520)
-        self.list.currentRowChanged.connect(self.show_session)
-        top.addWidget(self.list)
+        self.tree = QTreeWidget()
+        self.tree.setObjectName("hist")
+        self.tree.setHeaderHidden(True)
+        self.tree.setFixedWidth(320)
+        self.tree.setMinimumHeight(520)
+        self.tree.setIndentation(14)
+        self.tree.currentItemChanged.connect(self.on_select)
+        top.addWidget(self.tree)
         right = QVBoxLayout()
         self.summary = label("", 10, wrap=True)
         sc = Card("Riepilogo")
@@ -901,6 +1208,7 @@ class HistoryPage:
         b.clicked.connect(self.load)
         lay.addWidget(b, 0, Qt.AlignmentFlag.AlignLeft)
         self.sessions = []
+        self.games = {}
         self.load()
 
     def db(self):
@@ -910,21 +1218,108 @@ class HistoryPage:
         return con
 
     def load(self):
-        self.list.clear()
+        self.tree.clear()
         try:
             con = self.db()
-            self.sessions = con.execute("SELECT * FROM sessions ORDER BY start DESC LIMIT 200").fetchall()
+            self.sessions = con.execute(
+                "SELECT s.*, (SELECT COUNT(*) FROM samples WHERE session=s.id) AS n FROM sessions s "
+                "ORDER BY start DESC LIMIT 1000").fetchall()
         except sqlite3.Error:
             self.sessions = []
-        for s in self.sessions:
-            mins = (s["end"] - s["start"]) / 60
-            it = QListWidgetItem(f"{s['game']}\n{time.strftime('%d/%m %H:%M', time.localtime(s['start']))}"
-                                 f" · {mins:.0f} min")
-            self.list.addItem(it)
-        if self.sessions:
-            self.list.setCurrentRow(0)
+        self.games = {}
+        for i, s in enumerate(self.sessions):
+            self.games.setdefault(game_title(s["game"]), []).append(i)
+        first = None
+        for name, idxs in self.games.items():   # già in ordine di partita più recente
+            ss = [self.sessions[i] for i in idxs]
+            played = sum(s["n"] for s in ss)     # un campione al secondo mentre il gioco disegna
+            last = time.strftime('%d/%m', time.localtime(ss[0]["start"]))
+            n = len(ss)
+            top = QTreeWidgetItem([f"{name}\n{n} session{'e' if n == 1 else 'i'} · {fmt_dur(played)} · ultima {last}"])
+            f = top.font(0)
+            f.setBold(True)
+            top.setFont(0, f)
+            top.setData(0, Qt.ItemDataRole.UserRole, ("game", name))
+            for i in idxs:
+                s = self.sessions[i]
+                it = QTreeWidgetItem([f"{time.strftime('%a %d/%m %H:%M', time.localtime(s['start']))}"
+                                      f"  ·  {fmt_dur(s['n'])}"])
+                it.setData(0, Qt.ItemDataRole.UserRole, ("session", i))
+                top.addChild(it)
+            self.tree.addTopLevelItem(top)
+            if first is None:
+                first = top
+        if first:
+            first.setExpanded(True)
+            self.tree.setCurrentItem(first)
         else:
             self.summary.setText(f"<span style='color:{P['MUTED']}'>Ancora nessuna partita registrata.</span>")
+
+    def on_select(self, cur, _prev):
+        if not cur:
+            return
+        kind, val = cur.data(0, Qt.ItemDataRole.UserRole)
+        if kind == "game":
+            self.show_game(val)
+        else:
+            self.show_session(val)
+
+    @staticmethod
+    def stats(rows):
+        def stat(k, f=max):
+            v = [r[k] for r in rows if r[k] is not None]
+            return f(v) if v else 0
+        fps = [r["fps"] for r in rows if r["fps"]]
+        low = [r["low1"] for r in rows if r["low1"]]
+        thr = 100 * sum(r["throttling"] or 0 for r in rows) / len(rows)
+        return (f"FPS medi <b>{sum(fps) / len(fps) if fps else 0:.0f}</b> · 1% low medio "
+                f"<b>{sum(low) / len(low) if low else 0:.0f}</b>"
+                f" · CPU max <b style='color:{temp_color(stat('cpu_temp'), 80, 90)}'>{stat('cpu_temp'):.0f}°C</b>"
+                f" · GPU max <b style='color:{temp_color(stat('gpu_temp'))}'>{stat('gpu_temp'):.0f}°C</b>"
+                f" · consumo medio <b>{stat('power', lambda v: sum(v) / len(v)):.0f} W</b>"
+                f" · taglio clock <b style='color:{P['BAD'] if thr > 5 else P['GOOD']}'>{thr:.0f}% del tempo</b>"), fps
+
+    def draw(self, rows, marks):
+        """marks: [(t, testo)]"""
+        step = max(1, len(rows) // 400)
+        rs = rows[::step]
+
+        def col(k):
+            return [r[k] for r in rs]
+        mk = []
+        for t, note in marks:
+            idx = min(range(len(rs)), key=lambda j: abs(rs[j]["t"] - t))
+            mk.append((idx, note))
+        fps = [r["fps"] for r in rows if r["fps"]]
+        top = max(60, max(fps or [60]) * 1.15)
+        self.c_fps.set([("FPS", col("fps"), P["GOOD"], top), ("1% low", col("low1"), P["WARN"], top)], mk)
+        self.c_temp.set([("CPU °C", col("cpu_temp"), P["BAD"], 100), ("GPU °C", col("gpu_temp"), P["WARN"], 100)], mk)
+        self.c_clk.set([("Clock GPU MHz", col("gpu_clk"), P["ACCENT"], 2100),
+                        ("Consumo W ×10", [None if v is None else v * 10 for v in col("power")], P["PURPLE"], 2100)], mk)
+
+    def show_game(self, name):
+        ss = [self.sessions[i] for i in self.games.get(name, [])]
+        if not ss:
+            return
+        con = self.db()
+        ids = [s["id"] for s in ss]
+        q = ",".join("?" * len(ids))
+        rows = con.execute(f"SELECT * FROM samples WHERE session IN ({q}) ORDER BY t", ids).fetchall()
+        if not rows:
+            self.summary.setText("Nessun dato.")
+            return
+        played = sum(s["n"] for s in ss)
+        first = time.strftime('%d/%m/%Y', time.localtime(ss[-1]["start"]))
+        last = time.strftime('%d/%m/%Y', time.localtime(ss[0]["start"]))
+        profs = sorted({s["profile"] for s in ss if s["profile"]})
+        text, _ = self.stats(rows)
+        self.summary.setText(
+            f"<b>{name}</b> <span style='color:{P['MUTED']}'>· {len(ss)} sessioni · in gioco {fmt_dur(played)}"
+            f" · dal {first} al {last} · {'profilo ' + ', '.join(profs) if profs else 'nessun profilo'}</span><br>"
+            + text + f"<br><span style='color:{P['DIM']}'>Grafici: tutte le sessioni una dopo l'altra, "
+            "le linee viola separano le sessioni.</span>")
+        bounds = [(s["start"], time.strftime('%d/%m %H:%M', time.localtime(s["start"]))) for s in reversed(ss)]
+        self.draw(rows, bounds[1:] if len(bounds) > 1 else [])
 
     def show_session(self, i):
         if i < 0 or i >= len(self.sessions):
@@ -936,35 +1331,16 @@ class HistoryPage:
         if not rows:
             self.summary.setText("Nessun dato.")
             return
-        step = max(1, len(rows) // 400)
-        rs = rows[::step]
-
-        def col(k):
-            return [r[k] for r in rs]
-
-        def stat(k, f=max):
-            v = [r[k] for r in rows if r[k] is not None]
-            return f(v) if v else 0
-        fps = [r["fps"] for r in rows if r["fps"]]
-        low = [r["low1"] for r in rows if r["low1"]]
-        thr = 100 * sum(r["throttling"] or 0 for r in rows) / len(rows)
+        total = s["end"] - s["start"]
+        away = total - s["n"]
+        text, _ = self.stats(rows)
+        when = time.strftime('%d/%m %H:%M', time.localtime(s["start"])) + "–" + \
+            time.strftime('%H:%M', time.localtime(s["end"]))
         self.summary.setText(
-            f"<b>{s['game']}</b> <span style='color:{P['MUTED']}'>· {s['api']} · "
-            f"{'profilo ' + s['profile'] if s['profile'] else 'nessun profilo'} · {(s['end'] - s['start']) / 60:.0f} min</span><br>"
-            f"FPS medi <b>{sum(fps) / len(fps) if fps else 0:.0f}</b> · 1% low medio <b>{sum(low) / len(low) if low else 0:.0f}</b>"
-            f" · CPU max <b style='color:{temp_color(stat('cpu_temp'), 80, 90)}'>{stat('cpu_temp'):.0f}°C</b>"
-            f" · GPU max <b style='color:{temp_color(stat('gpu_temp'))}'>{stat('gpu_temp'):.0f}°C</b>"
-            f" · consumo medio <b>{stat('power', lambda v: sum(v) / len(v)):.0f} W</b>"
-            f" · taglio clock <b style='color:{P['BAD'] if thr > 5 else P['GOOD']}'>{thr:.0f}% del tempo</b>")
-        mk = []
-        for m in marks:
-            idx = min(range(len(rs)), key=lambda j: abs(rs[j]["t"] - m["t"]))
-            mk.append((idx, m["note"]))
-        top = max(60, max(fps or [60]) * 1.15)
-        self.c_fps.set([("FPS", col("fps"), P["GOOD"], top), ("1% low", col("low1"), P["WARN"], top)], mk)
-        self.c_temp.set([("CPU °C", col("cpu_temp"), P["BAD"], 100), ("GPU °C", col("gpu_temp"), P["WARN"], 100)], mk)
-        self.c_clk.set([("Clock GPU MHz", col("gpu_clk"), P["ACCENT"], 2100),
-                        ("Consumo W ×10", [None if v is None else v * 10 for v in col("power")], P["PURPLE"], 2100)], mk)
+            f"<b>{game_title(s['game'])}</b> <span style='color:{P['MUTED']}'>· {when} · {s['api']} · "
+            f"{'profilo ' + s['profile'] if s['profile'] else 'nessun profilo'} · in gioco {fmt_dur(s['n'])}"
+            + (f" (fuori dal gioco {fmt_dur(away)})" if away > 90 else "") + "</span><br>" + text)
+        self.draw(rows, [(m["t"], m["note"]) for m in marks])
 
     def refresh(self, st):
         pass

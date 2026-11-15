@@ -34,6 +34,19 @@ DEFAULTS = {
         "opacity": 0.82,
         "items": ["fps", "frametime", "cpu_temp", "gpu_temp", "gpu_clk", "power"],
         "graph": True,
+        "style": "bubble",        # bubble (cerchio intelligente), compact, full
+        # cerchio: mostra solo un valore e si allarga quando qualcosa richiede attenzione
+        "bubble": {
+            "center": "fps",      # fps, cpu_temp, gpu_temp, power
+            "idle": "visible",    # visible, faded, hidden: come resta quando va tutto bene
+            "hold_s": 8,          # quanto resta allargato dopo che il problema è sparito
+            "watch": ["cpu_temp", "gpu_temp", "fps_drop", "stutter", "throttling", "ram", "fan"],
+            "cpu_temp": 85, "gpu_temp": 80,
+            "fps_drop_pct": 85,   # sotto l'85% del limite FPS
+            "fps_min": 40,        # obiettivo quando non c'è un limite
+            "stutter_pct": 50,    # 1% low sotto metà degli FPS
+            "ram_pct": 90,
+        },
     },
     "alerts": {
         "enabled": True,
@@ -42,7 +55,8 @@ DEFAULTS = {
         "fan_min_rpm": 400,
         "cooldown_s": 180,
     },
-    "history": {"enabled": True, "keep_days": 60},
+    # merge_gap_s: se lo stesso gioco riprende entro questo tempo (alt+tab, caricamenti) è la stessa sessione
+    "history": {"enabled": True, "keep_days": 60, "merge_gap_s": 300},
     # VRR acceso solo mentre un gioco è attivo; sul desktop sempre spento
     "display": {"vrr_games_only": True, "vrr_off_delay_s": 8},
     "gpu_default": {"min": 1000, "max": 1750},
@@ -53,8 +67,9 @@ DEFAULTS = {
 }
 
 # campi dei profili: (chiave, etichetta, valori, formato) — usati da pannello in gioco e GUI
+STYLE_NAMES = {None: "come globale", "bubble": "cerchio", "compact": "barra", "full": "completo"}
 POS_NAMES = {None: "come globale", "top-left": "alto sinistra", "top-center": "alto centro",
-             "top-right": "alto destra", "bottom-left": "basso sinistra", "bottom-right": "basso destra"}
+             "top-right": "alto destra", "bottom-left": "basso sinistra", "bottom-center": "basso centro", "bottom-right": "basso destra"}
 PROFILE_FIELDS = [
     ("fps_limit", "Limite FPS", [None, 0, 30, 40, 45, 50, 60, 72, 75, 82, 90, 100, 110, 120, 144, 165],
      lambda v, g: "globale" if v is None else ("nessuno" if v == 0 else f"{v} FPS")),
@@ -65,9 +80,10 @@ PROFILE_FIELDS = [
      lambda v, g: "spenta" if v is None else f"CPU {v}°C"),
     ("hud", "Overlay", [True, False], lambda v, g: "visibile" if v in (True, None) else "nascosto"),
     ("hud_position", "Posizione overlay", list(POS_NAMES), lambda v, g: POS_NAMES.get(v, str(v))),
+    ("hud_style", "Stile overlay", list(STYLE_NAMES), lambda v, g: STYLE_NAMES.get(v, str(v))),
 ]
 FIELD_DEFAULT = {"fps_limit": None, "gpu_max": None, "vrr": False, "heat_guard": None, "hud": True,
-                 "hud_position": None}
+                 "hud_position": None, "hud_style": None}
 
 PALETTE = {
     "BG": "#0e1116", "SIDEBAR": "#12161c", "CARD": "#161b22", "CARD2": "#1c232c",

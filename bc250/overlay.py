@@ -67,195 +67,54 @@ class LayerWindow(QWidget):
         _setMargins(self._lw, ctypes.addressof(m))
 
 
-# ---------------------------------------------------------------- drawing helpers
-def qc(hexcol, alpha=255):
-    c = QColor(hexcol)
-    c.setAlpha(alpha)
-    return c
-
-
-def font(size, bold=False):
-    f = QFont()
-    f.setPointSizeF(size)
-    f.setBold(bold)
-    return f
-
-
-def temp_col(t, warn=75, bad=85):
-    if t is None:
-        return P["MUTED"]
-    return P["BAD"] if t >= bad else P["WARN"] if t >= warn else P["GOOD"]
-
-
-def fps_col(fps, limit):
-    if not fps:
-        return P["MUTED"]
-    target = limit or 60
-    return P["GOOD"] if fps >= target * 0.9 else P["WARN"] if fps >= target * 0.6 else P["BAD"]
-
-
-def draw_series(p, rect, values, vmax, color, fill=True, width=1.6, vmin=0.0):
-    vals = [v for v in values if v is not None]
-    if len(vals) < 2 or vmax <= vmin:
-        return
-    n = len(values)
-    path = QPainterPath()
-    started = False
-    for i, v in enumerate(values):
-        if v is None:
-            continue
-        x = rect.left() + rect.width() * i / max(1, n - 1)
-        y = rect.bottom() - rect.height() * max(0.0, min(1.0, (v - vmin) / (vmax - vmin)))
-        if not started:
-            path.moveTo(x, y)
-            first_x = x
-            started = True
-        else:
-            path.lineTo(x, y)
-    if fill:
-        area = QPainterPath(path)
-        area.lineTo(x, rect.bottom())
-        area.lineTo(first_x, rect.bottom())
-        area.closeSubpath()
-        p.fillPath(area, qc(color, 40))
-    p.setPen(QPen(qc(color), width))
-    p.setBrush(Qt.BrushStyle.NoBrush)
-    p.drawPath(path)
-
-
 # ---------------------------------------------------------------- HUD
-ITEM_LABELS = {
-    "cpu_temp": "CPU", "gpu_temp": "GPU", "gpu_clk": "CLK", "power": "W", "gpu_busy": "GPU%",
-    "cpu_load": "CPU%", "fan": "FAN", "ram": "RAM", "vram": "VRAM", "low1": "1%",
-}
+from .hudpaint import HudPainter, draw_series, font, fps_col, qc, temp_col  # noqa: E402
 
 
 class Hud(LayerWindow):
     def __init__(self):
         super().__init__()
         self.state, self.cfg = {}, common.load_config()
+        self.painter = HudPainter()
+        self.anim = QTimer(self)
+        self.anim.timeout.connect(self.animate)
 
     def update_from(self, state, cfg):
         self.state, self.cfg = state, cfg
         o = cfg["overlay"]
         self.place(o["position"], int(o["margin"]))
-        sc = float(o["scale"])
-        items = [i for i in o["items"] if i not in ("fps", "frametime")]
-        w = int((150 + 64 * max(0, len(items) - 2) if items else 150) * sc)
-        w = max(w, int(190 * sc))
-        h = int((44 + (34 if "frametime" in o["items"] and o.get("graph", True) else 0)
-                 + (26 if items else 0)) * sc)
+        self.painter.update(state, cfg)
+        if not self.isVisible():
+            # riparte dal cerchio chiuso e trasparente: compare allargandosi
+            self.painter.w_cur = float(self.painter.D)
+            self.painter.alpha = 0.0
+        self.resize_to()
+        self.update()
+        if not self.anim.isActive():
+            self.painter.step(0)
+            self.anim.start(16)
+
+    def wants_visible(self):
+        return self.painter.visible(self.cfg)
+
+    def resize_to(self):
+        w, h = self.painter.size(self.state, self.cfg)
         if (self.width(), self.height()) != (w, h):
             self.setFixedSize(w, h)
+
+    def animate(self):
+        moving = self.painter.step()
+        self.resize_to()
         self.update()
+        if not moving:
+            self.anim.stop()
+            if not self.wants_visible():
+                self.hide()
 
     def paintEvent(self, _):
         p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        o = self.cfg["overlay"]
-        sc = float(o["scale"])
-        p.scale(sc, sc)
-        W, H = self.width() / sc, self.height() / sc
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(qc(P["BG"], int(255 * float(o["opacity"]))))
-        p.drawRoundedRect(QRectF(0, 0, W, H), 10, 10)
-
-        st = self.state
-        g = st.get("game") or {}
-        s = st.get("sensors") or {}
-        fps = g.get("fps")
-        limit = g.get("limit") or 0
-        x, y = 12, 8
-        # FPS
-        p.setFont(font(20, True))
-        p.setPen(qc(fps_col(fps, limit)))
-        txt = f"{fps:.0f}" if fps else "—"
-        p.drawText(QRectF(x, y, 80, 32), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, txt)
-        tw = QFontMetrics(font(20, True)).horizontalAdvance(txt)
-        p.setFont(font(7.5, True))
-        p.setPen(qc(P["MUTED"]))
-        p.drawText(QRectF(x + tw + 5, y + 4, 40, 12), Qt.AlignmentFlag.AlignLeft, "FPS")
-        # stato limite
-        eng = st.get("engine") or {}
-        if g:
-            if limit:
-                badge, col = f"⏵ {limit}", P["ACCENT"]
-            else:
-                badge, col = "∞", P["DIM"]
-            p.setFont(font(7.5, True))
-            p.setPen(qc(col))
-            p.drawText(QRectF(x + tw + 5, y + 17, 50, 12), Qt.AlignmentFlag.AlignLeft, badge)
-        elif not eng.get("limit_enabled", True):
-            pass
-        # frametime ms + 1% low a destra
-        p.setFont(font(8.5))
-        p.setPen(qc(P["MUTED"]))
-        ft = g.get("frametime")
-        right = f"{ft:.1f} ms" if ft else ""
-        if g.get("low1"):
-            right += f"   1% {g['low1']:.0f}"
-        p.drawText(QRectF(0, y + 2, W - 12, 28), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, right)
-        y += 38
-        # grafico frametime
-        if "frametime" in o["items"] and o.get("graph", True):
-            fts = g.get("frametimes") or []
-            r = QRectF(12, y, W - 24, 26)
-            p.setPen(QPen(qc(P["BORDER"]), 1))
-            p.drawLine(QPointF(r.left(), r.bottom()), QPointF(r.right(), r.bottom()))
-            if fts:
-                target = 1000.0 / limit if limit else (sum(fts) / len(fts))
-                vmax = max(target * 2.2, max(fts) * 1.1)
-                draw_series(p, r, fts, vmax, fps_col(fps, limit), fill=True, width=1.3)
-            y += 34
-        # metriche
-        items = [i for i in o["items"] if i not in ("fps", "frametime")]
-        if items:
-            cw = (W - 24) / len(items)
-            for i, it in enumerate(items):
-                val, col = self.metric_value(it, s, g)
-                cx = 12 + i * cw
-                p.setFont(font(6.5, True))
-                p.setPen(qc(P["DIM"]))
-                p.drawText(QRectF(cx, y - 4, cw, 10), Qt.AlignmentFlag.AlignLeft, ITEM_LABELS.get(it, it))
-                p.setFont(font(9, True))
-                p.setPen(qc(col))
-                p.drawText(QRectF(cx, y + 5, cw, 14), Qt.AlignmentFlag.AlignLeft, val)
+        self.painter.paint(p, self.state, self.cfg, self.width(), self.height())
         p.end()
-
-    @staticmethod
-    def metric_value(it, s, g):
-        def v(k):
-            return s.get(k)
-        if it == "cpu_temp":
-            t = v("cpu_temp")
-            return (f"{t:.0f}°" if t else "—"), temp_col(t, 80, 90)
-        if it == "gpu_temp":
-            t = v("gpu_temp")
-            return (f"{t:.0f}°" if t else "—"), temp_col(t, 75, 85)
-        if it == "gpu_clk":
-            c = v("gpu_clk")
-            return (f"{c:.0f}" if c else "—"), P["TEXT"]
-        if it == "power":
-            w = v("power")
-            return (f"{w:.0f}W" if w else "—"), P["TEXT"]
-        if it == "gpu_busy":
-            b = v("gpu_busy")
-            return (f"{b:.0f}%" if b is not None else "—"), P["TEXT"]
-        if it == "cpu_load":
-            b = v("cpu_load")
-            return (f"{b:.0f}%" if b is not None else "—"), P["TEXT"]
-        if it == "fan":
-            f = v("fan")
-            return (f"{f}" if f else "—"), P["TEXT"] if f else P["BAD"]
-        if it == "ram":
-            r = v("ram") or [None, None]
-            return (f"{r[0]:.1f}G" if r[0] else "—"), P["TEXT"]
-        if it == "vram":
-            r = v("vram") or [None, None]
-            return (f"{r[0]:.0f}M" if r[0] else "—"), P["TEXT"]
-        if it == "low1":
-            return (f"{g['low1']:.0f}" if g.get("low1") else "—"), P["TEXT"]
-        return "—", P["MUTED"]
 
 
 # ---------------------------------------------------------------- profilo modificabile dal pannello
@@ -327,7 +186,7 @@ class Panel(LayerWindow):
                 del self.pending[k]
         name = g.get("profile") or (g["name"].removesuffix(".exe") + " (nuovo)")
         self.card(p, r, f"Profilo del gioco · {name}")
-        cols, rows = 3, 2
+        cols = 4
         cw = (r.width() - 24 - (cols - 1) * 10) / cols
         chh = 40
         for i, (key, label_, _values, fmt) in enumerate(PROFILE_FIELDS):
@@ -637,10 +496,14 @@ class Controller:
         want_hud = (o["hud_visible"] and not stale and (g or not o["only_in_game"])
                     and prof.get("hud", True) is not False)
         if want_hud:
-            cfg = self.cfg
+            ov = dict(o)
             if prof.get("hud_position"):
-                cfg = dict(cfg, overlay=dict(o, position=prof["hud_position"]))
-            self.hud.update_from(st, cfg)
+                ov["position"] = prof["hud_position"]
+            if prof.get("hud_style"):
+                ov["style"] = prof["hud_style"]
+            self.hud.update_from(st, dict(self.cfg, overlay=ov))
+            # cerchio con «nascosto»: compare solo quando qualcosa richiede attenzione
+            want_hud = self.hud.wants_visible()
         if want_hud != self.hud.isVisible():
             self.hud.setVisible(bool(want_hud))
         if self.panel_on:

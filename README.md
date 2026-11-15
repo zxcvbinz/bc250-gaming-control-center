@@ -8,10 +8,15 @@ overlay in gioco, profili per gioco, VRR, salute del sistema, storico e server M
 |---|---|
 | `layer/` (C) | `libbc250_vk.so` layer Vulkan implicito + `libbc250_gl.so` (LD_PRELOAD OpenGL). Conta i frame e applica il limite FPS, cambiabile a caldo. |
 | `bc250d` | Servizio utente: sensori, giochi attivi, profili, storico SQLite, avvisi. Scrive lo stato in `/dev/shm/bc250-$UID/state.json`. |
-| `bc250-overlay` | HUD minimal + pannello dettagli + avvisi a schermo (Wayland layer-shell, sopra anche ai giochi a schermo intero). |
-| `bc250-control` | GUI: Panoramica, Giochi e FPS, Profili, Overlay, Display (VRR), Salute, Storico, Avvisi. |
+| `bc250-overlay` | HUD + pannello dettagli + avvisi a schermo (Wayland layer-shell, sopra anche ai giochi a schermo intero). Tre stili: **cerchio intelligente** (solo FPS, si allarga quando CPU/GPU scaldano, gli FPS calano, ci sono scatti, taglio clock, RAM piena o ventola ferma), barra compatta, completo. Il disegno è in `hudpaint.py`, condiviso con l'anteprima della GUI. |
+| `bc250-control` | GUI: Panoramica, Giochi e FPS, Profili, Overlay (con anteprima sul tuo schermo e demo), Display (VRR), Salute, Storico (raggruppato per gioco), Avvisi. |
 | `bc250ctl` | Comandi rapidi: `toggle-limit`, `toggle-panel`, `toggle-hud`, `limit <n|off>`, `status`. |
 | `bc250-mcp` | Server MCP per Claude Code (stato live, storico, segni nei test, limite FPS, clock GPU, profili). |
+
+## Storico
+Una sessione resta aperta se il gioco smette di disegnare per poco (alt+tab, caricamenti): se lo stesso
+gioco torna entro `history.merge_gap_s` (300 s) continua la stessa sessione. All'avvio il servizio
+unisce anche le sessioni già spezzate.
 
 ## Tasti
 - **Shift+F1** limite FPS on/off
