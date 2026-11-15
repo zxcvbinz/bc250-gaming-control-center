@@ -3,6 +3,7 @@
 Ogni 0.5 s: legge sensori e giochi attivi, scrive lo stato per overlay/GUI/MCP.
 Applica limite FPS e profili per gioco, registra lo storico, manda gli avvisi.
 """
+import json
 import os
 import signal
 import sqlite3
@@ -11,7 +12,7 @@ import sys
 import threading
 import time
 
-from . import common, health, i18n
+from . import common, gamecfg, health, i18n
 from .i18n import T
 from .engine import FrameSource, write_control
 from .sensors import Sensors, governor_config, governor_range, governor_set
@@ -35,6 +36,13 @@ class History:
             CREATE INDEX IF NOT EXISTS samples_session ON samples(session, t);
             -- id di sessioni unite ad altre: chi chiede il vecchio id trova quella nuova
             CREATE TABLE IF NOT EXISTS session_alias(old INTEGER PRIMARY KEY, new INTEGER);
+            CREATE TABLE IF NOT EXISTS marks(session INTEGER, t REAL, note TEXT);
+            -- impostazioni grafiche: kind = start (fotografia all'avvio), change (modificate in gioco),
+            -- applied (scritte dal profilo a gioco chiuso)
+            CREATE TABLE IF NOT EXISTS game_settings(session INTEGER, game TEXT, t REAL, kind TEXT, data TEXT);
+            CREATE INDEX IF NOT EXISTS game_settings_session ON game_settings(session, t);
+            -- dove stanno le impostazioni di ogni gioco (per leggerle/cambiarle a gioco chiuso)
+            CREATE TABLE IF NOT EXISTS game_files(game TEXT PRIMARY KEY, info TEXT, updated REAL);
         """)
         self.session = None
         self.current = None     # (nome, appid) del gioco della sessione aperta
@@ -141,6 +149,25 @@ def match_profile(cfg, game):
     return None
 
 
+def apply_graphics(db, game, want, session=None):
+    """Scrive le impostazioni grafiche `want` nel file del gioco (chiuso), con backup.
+    Ritorna (cambiate, backup) o solleva ValueError."""
+    row = db.execute("SELECT info FROM game_files WHERE game=?", (game,)).fetchone()
+    src = gamecfg.from_saved(json.loads(row[0])) if row else None
+    if not src:
+        raise ValueError("file delle impostazioni sconosciuto: avvia il gioco una volta")
+    cur = src.read()
+    todo = {k: v for k, v in want.items() if str(cur.get(k)) != str(v)}
+    if not todo:
+        return {}, None
+    bak = src.backup(game)
+    src.write(todo)
+    db.execute("INSERT INTO game_settings VALUES(?,?,?,?,?)", (session, game, time.time(), "applied",
+               gamecfg.dumps({"changes": {k: [cur.get(k), v] for k, v in todo.items()}, "backup": bak})))
+    db.commit()
+    return todo, bak
+
+
 def notify(title, body, urgent=False):
     try:
         subprocess.Popen(["notify-send", "-a", "BC-250", "-i", "temperature-high" if urgent else "dialog-information",
@@ -170,6 +197,11 @@ class Daemon:
         self.vrr_lock = threading.Lock()
         self.guard_cut = 0          # FPS tolti dalla protezione calore
         self.guard_t = 0.0
+        self.gfx = None             # sorgente impostazioni grafiche del gioco in corso
+        self.gfx_game = None
+        self.gfx_data = {}
+        self.gfx_mtime = 0
+        self.gfx_pending = None     # (gioco, pid) da sistemare quando il processo esce
         self.apply_control()
         self.hist.prune(self.cfg["history"]["keep_days"])
         n = self.hist.merge_split(self.gap())
@@ -264,11 +296,90 @@ class Daemon:
         self.apply_profile(game, self.profile)
         self.game = game
         if not game:
+            self.gfx = None
+        if not game:
             return  # la sessione resta aperta: il gioco può tornare (alt+tab, caricamenti)
         if self.hist.session and self.hist.current != self.hist.ident(game):
             self.hist.stop()  # è partito un altro gioco
         if not self.hist.session and self.cfg["history"]["enabled"]:
             self.hist.start(game, self.profile["name"] if self.profile else None, self.gap())
+        if self.gfx_game != game["name"] or not self.gfx:
+            self.gfx_start(game)
+
+    # ------------------------------------------------------------ impostazioni grafiche
+    def gfx_start(self, game):
+        """Fotografia delle impostazioni del gioco appena partito (una volta per sessione)."""
+        try:
+            src = gamecfg.detect(game)
+        except Exception as ex:
+            print("gfx detect:", repr(ex), file=sys.stderr, flush=True)
+            src = None
+        prev = self.gfx_data if self.gfx_game == game["name"] else None
+        self.gfx, self.gfx_game = src, game["name"]
+        self.gfx_pending = (game["name"], game["pid"], game.get("appid") or "")
+        if not src:
+            return
+        self.gfx_data, self.gfx_mtime = src.read(), src.mtime()
+        db = self.hist.db
+        db.execute("INSERT OR REPLACE INTO game_files VALUES(?,?,?)",
+                   (game["name"], gamecfg.dumps(src.describe()), time.time()))
+        last = db.execute("SELECT data FROM game_settings WHERE session=? AND kind IN ('start','change') "
+                          "ORDER BY t DESC LIMIT 1", (self.hist.session,)).fetchone()
+        if last is None or self.hist.session is None:
+            db.execute("INSERT INTO game_settings VALUES(?,?,?,?,?)", (self.hist.session, game["name"], time.time(),
+                       "start", gamecfg.dumps({"source": src.describe(), "settings": self.gfx_data})))
+        elif prev is not None:   # stessa sessione ripresa: conta solo cosa è cambiato nel frattempo
+            ch = gamecfg.diff(prev, self.gfx_data)
+            if ch:
+                db.execute("INSERT INTO game_settings VALUES(?,?,?,?,?)", (self.hist.session, game["name"],
+                           time.time(), "change", gamecfg.dumps({"changes": ch})))
+        db.commit()
+
+    def gfx_check(self):
+        """Ogni 5 s: il gioco ha riscritto le impostazioni? Registra cosa è cambiato e mette un segno."""
+        if not self.gfx:
+            return
+        m = self.gfx.mtime()
+        if m == self.gfx_mtime:
+            return
+        self.gfx_mtime = m
+        new = self.gfx.read()
+        ch = gamecfg.diff(self.gfx_data, new)
+        self.gfx_data = new
+        if not ch:
+            return
+        db = self.hist.db
+        now = time.time()
+        db.execute("INSERT INTO game_settings VALUES(?,?,?,?,?)",
+                   (self.hist.session, self.gfx_game, now, "change", gamecfg.dumps({"changes": ch})))
+        if self.hist.session:
+            db.execute("INSERT INTO marks VALUES(?,?,?)",
+                       (self.hist.session, now, "⚙ " + gamecfg.describe_changes(ch)))
+        db.commit()
+        # cambiate a mano in gioco: la scelta dell'utente vince su quella del profilo
+        if self.profile and set(ch) & set(self.profile.get("graphics") or {}):
+            pname = self.profile["name"]
+
+            def fn(c):
+                for p in c["profiles"]:
+                    if p.get("name") == pname and p.get("graphics"):
+                        p["graphics"] = {k: v for k, v in p["graphics"].items() if k not in ch}
+            common.update_config(fn)
+        common.overlay_send("toast:" + T("Grafica cambiata: {c}", c=gamecfg.describe_changes(ch, 2)))
+
+    def gfx_after_exit(self):
+        """Gioco chiuso: applica le impostazioni grafiche volute dal profilo (il gioco le ha appena
+        riscritte uscendo, così al prossimo avvio parte con quelle del profilo)."""
+        if not self.gfx_pending:
+            return
+        name, pid, appid = self.gfx_pending
+        if os.path.exists(f"/proc/{pid}"):
+            return
+        self.gfx_pending = None
+        prof = match_profile(self.cfg, {"name": name, "appid": appid})
+        want = (prof or {}).get("graphics") or {}
+        if want:
+            apply_graphics(self.hist.db, name, want, self.hist.session)
 
     def track_session(self, game):
         if game:
@@ -354,6 +465,11 @@ class Daemon:
             self.on_game_change(game)
             self.game_key = key
         self.track_session(game)
+        if self.n % 10 == 0:
+            try:
+                self.gfx_check() if game else self.gfx_after_exit()
+            except Exception as ex:
+                print("gfx:", repr(ex), file=sys.stderr, flush=True)
         self.heat_guard(game, s)
         self.manage_vrr(game)
         throttle = self.gov_cfg.get("throttle")

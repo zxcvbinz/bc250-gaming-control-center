@@ -51,6 +51,11 @@ sessions, total time in game and the last date.
   all sessions in a row. A purple line marks where each session starts.
 - Select a **session**: its summary and charts, with the marks added during tests.
 
+## Graphics settings
+
+Each session also stores the game's graphics settings at launch and every change made while playing
+(each change also adds a mark). See [In-game graphics settings](graphics.md).
+
 ## Marks
 
 During a test you (or an AI assistant through MCP) can add a **mark** ("shadows low", "limit 75"…). Marks

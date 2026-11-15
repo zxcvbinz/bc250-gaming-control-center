@@ -25,6 +25,8 @@ After updating the app, reconnect the server in your client (`/mcp` in Claude Co
 | `set_gpu_clock` | `max`, `min` | changes the governor range live (temporary: a profile or game change resets it) |
 | `list_profiles` | – | all game profiles |
 | `save_profile` | `name` + any profile field | creates or updates a profile (see [Profiles](profiles.md)) |
+| `get_game_settings` | `game` (optional), `all` | the game's own graphics settings, what the profile enforces, history of changes ([details](graphics.md)) |
+| `set_game_settings` | `game`, `settings`, `save_to_profile` | changes graphics settings: now if the game is closed, at exit if it runs |
 | `health_check` | – | the same checks as the Health page |
 | `get_config` | – | engine, alerts, default GPU clock and overlay settings |
 
@@ -35,3 +37,6 @@ After updating the app, reconnect the server in your client (`/mcp` in Claude Co
 3. You play for a few minutes; it tries `limit 90` and marks again.
 4. `get_session` compares the two stretches: average FPS, 1% low, max CPU/GPU temperature, throttling.
 5. It saves the winner with `save_profile`.
+6. For heavier changes it reads the graphics with `get_game_settings` and lowers the expensive options with
+   `set_game_settings`. They apply from the next launch, and the next session shows whether temperatures
+   and 1% lows improved.

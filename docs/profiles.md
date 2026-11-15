@@ -35,6 +35,7 @@ are always matched by process name. For Windows games the process name is the `.
 | `hud` | `true` / `false` | show the overlay in this game |
 | `hud_position` | `null` (global) or an anchor | overlay position in this game |
 | `hud_style` | `null` (global), `bubble`, `ring`, `compact`, `full` | overlay style in this game |
+| `graphics` | `{key: value}` | the game's own graphics settings to enforce, applied when the game closes ([details](graphics.md)) |
 | `notes` | text | free notes |
 
 Example (`~/.config/bc250/config.json`):

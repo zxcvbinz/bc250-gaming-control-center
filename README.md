@@ -56,6 +56,10 @@ babysitting. This app keeps an eye on it while you play and lets you tune each g
   → [Session history](docs/history.md)
 - **Health checks and alerts**: desktop notifications and on-screen toasts for temperature, fan and RAM.
   → [Alert settings](docs/configuration.md#alerts) · [Troubleshooting](docs/troubleshooting.md)
+- **In-game graphics settings**: reads each game's own settings (Unreal Engine, Unity, No Man's Sky) at
+  launch, records changes you make while playing as marks in the session, and applies settings from the
+  game profile when the game closes, with backups. An AI assistant can tune them through MCP.
+  → [In-game graphics settings](docs/graphics.md)
 - **Real GPU clock for every tool on 8-core boards**: after the 8-core unlock the SMU metrics table
   loses the GPU clock, so MangoHud, the Steam overlay and LACT show 3–100 MHz. `bc250-metricsfix`
   (a small root service) writes the real clock, read by
@@ -83,6 +87,7 @@ Full docs live in [`docs/`](docs/README.md):
 - [Overlay](docs/overlay.md): the four HUD styles, smart bubble rules, full ring, Shift+F2 panel
 - [Game profiles](docs/profiles.md): matching, FPS limit priority, heat guard, VRR, GPU clock
 - [Session history](docs/history.md): what is recorded and how sessions survive alt+tab
+- [In-game graphics settings](docs/graphics.md): read, track and tune each game's own graphics options
 - [Real GPU clock on 8-core boards](docs/gpu-clock-8core.md): why tools show 10 MHz and how it is fixed
 - [MCP server](docs/mcp.md): tools for AI assistants
 - [Configuration reference](docs/configuration.md): every setting, file and command

@@ -1,4 +1,5 @@
 """BC-250 Control Center — interfaccia principale."""
+import json
 import os
 import re
 import sqlite3
@@ -16,7 +17,7 @@ from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboB
                              QSizePolicy, QSlider, QSpinBox, QStackedWidget, QTableWidget, QTableWidgetItem, QTreeWidget, QTreeWidgetItem,
                              QVBoxLayout, QWidget)
 
-from . import common, health, i18n
+from . import common, gamecfg, health, i18n
 from .engine import write_control
 from .i18n import T
 from .hudpaint import (ACCENTS, CENTER, DEMOS, IDLE, LOOK_DEFAULT, STYLES, WATCH, HudPainter,
@@ -1371,8 +1372,35 @@ class HistoryPage:
             f"<b>{game_title(s['game'])}</b> <span style='color:{P['MUTED']}'>· {when} · {s['api']} · "
             + (T("profilo {p}", p=s['profile']) if s['profile'] else T("nessun profilo"))
             + " · " + T("in gioco {d}", d=fmt_dur(s['n']))
-            + (" " + T("(fuori dal gioco {d})", d=fmt_dur(away)) if away > 90 else "") + "</span><br>" + text)
+            + (" " + T("(fuori dal gioco {d})", d=fmt_dur(away)) if away > 90 else "") + "</span><br>" + text
+            + self.graphics_html(con, s["id"]))
         self.draw(rows, [(m["t"], m["note"]) for m in marks])
+
+    @staticmethod
+    def graphics_html(con, sid):
+        """Impostazioni grafiche: quelle principali all'avvio e cosa è cambiato durante la partita."""
+        try:
+            evs = con.execute("SELECT * FROM game_settings WHERE session=? ORDER BY t", (sid,)).fetchall()
+        except sqlite3.Error:
+            return ""
+        if not evs:
+            return ""
+        out = []
+        for e in evs:
+            d = json.loads(e["data"])
+            hhmm = time.strftime('%H:%M', time.localtime(e["t"]))
+            if e["kind"] == "start":
+                summ = gamecfg.summary(d.get("settings", {}), 14)
+                vals = " · ".join(f"{gamecfg.short(k)} <b>{v}</b>" for k, v in summ.items())
+                eng = (d.get("source") or {}).get("engine", "")
+                out.append(T("Grafica all'avvio ({e}):", e=eng) + " " + vals)
+            elif e["kind"] == "change":
+                out.append(f"<span style='color:{P['PURPLE']}'>{hhmm} " + T("cambiata in gioco:") + " "
+                           + gamecfg.describe_changes(d.get("changes", {}), 6) + "</span>")
+            else:
+                out.append(f"<span style='color:{P['ACCENT']}'>{hhmm} " + T("applicata dal profilo:") + " "
+                           + gamecfg.describe_changes(d.get("changes", {}), 6) + "</span>")
+        return f"<br><span style='color:{P['MUTED']}; font-size:9pt'>" + "<br>".join(out) + "</span>"
 
     def refresh(self, st):
         pass

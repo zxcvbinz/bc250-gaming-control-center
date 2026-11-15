@@ -9,7 +9,7 @@ import sqlite3
 import sys
 import time
 
-from . import common, health, i18n
+from . import common, gamecfg, health, i18n
 from .engine import write_control
 from .sensors import governor_range, governor_set
 
@@ -23,6 +23,8 @@ def db():
     con.row_factory = sqlite3.Row
     con.execute("CREATE TABLE IF NOT EXISTS marks(session INTEGER, t REAL, note TEXT)")
     con.execute("CREATE TABLE IF NOT EXISTS session_alias(old INTEGER PRIMARY KEY, new INTEGER)")
+    con.execute("CREATE TABLE IF NOT EXISTS game_settings(session INTEGER, game TEXT, t REAL, kind TEXT, data TEXT)")
+    con.execute("CREATE TABLE IF NOT EXISTS game_files(game TEXT PRIMARY KEY, info TEXT, updated REAL)")
     return con
 
 
@@ -165,6 +167,9 @@ def t_get_session(a):
         out["note"] = f"la sessione {asked} è stata unita alla {sid} (stesso gioco, ripreso entro pochi minuti)"
     if merged:
         out["merged_ids"] = merged
+    gfx = _gfx_events(con, None, sid)
+    if gfx:
+        out["graphics"] = gfx
     out.update({"summary": summarize(rows), "parts": pp, "marks": marks, "segments": segments,
             "timeline": downsample(rows, int(a.get("points", 60)))})
     return out
@@ -226,6 +231,82 @@ def t_save_profile(a):
     return {"ok": True, "profiles": common.load_config()["profiles"]}
 
 
+def _gfx_source(con, game):
+    """(nome gioco, sorgente, in esecuzione?) per il gioco richiesto o quello in corso."""
+    st = common.read_state()
+    g = st.get("game") if time.time() - st.get("ts", 0) < 5 else None
+    if g and (not game or game.lower() in g["name"].lower()):
+        src = gamecfg.detect(g)
+        if src:
+            return g["name"], src, True
+    q = f"%{game}%" if game else "%"
+    row = con.execute("SELECT game, info FROM game_files WHERE game LIKE ? ORDER BY updated DESC LIMIT 1",
+                      (q,)).fetchone()
+    if not row:
+        raise ValueError("impostazioni grafiche non trovate: il gioco va avviato almeno una volta "
+                         "(motori supportati: Unreal, Unity, No Man's Sky)")
+    return row[0], gamecfg.from_saved(json.loads(row[1])), False
+
+
+def _gfx_events(con, name, session=None):
+    q = "SELECT * FROM game_settings WHERE " + ("session=?" if session else "game=?") + " ORDER BY t"
+    out = []
+    for r in con.execute(q, (session or name,)):
+        d = json.loads(r["data"])
+        ev = {"t": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["t"])), "kind": r["kind"]}
+        if r["kind"] == "start":
+            ev["settings"] = gamecfg.summary(d.get("settings", {}))
+        else:
+            ev["changes"] = d.get("changes")
+        out.append(ev)
+    return out
+
+
+def t_get_game_settings(a):
+    con = db()
+    name, src, running = _gfx_source(con, a.get("game"))
+    if not src:
+        raise ValueError("il file delle impostazioni non esiste più")
+    data = src.read()
+    prof = next((p for p in common.load_config()["profiles"]
+                 if p.get("match") and p["match"].lower() in name.lower()), None)
+    return {"game": name, "running": running, **src.describe(),
+            "settings": data if a.get("all") else gamecfg.summary(data, 200),
+            "total_keys": len(data),
+            "profile_graphics": (prof or {}).get("graphics") or {},
+            "history": _gfx_events(con, name)[-20:],
+            "note": "I giochi leggono le impostazioni all'avvio: le modifiche valgono dal prossimo avvio. "
+                    "Unreal: chiavi 'Sezione/Chiave' (sg.ShadowQuality 0-3 = basso..epico)."}
+
+
+def t_set_game_settings(a):
+    from .daemon import apply_graphics
+    con = db()
+    name, src, running = _gfx_source(con, a["game"])
+    want = {k: str(v) if not isinstance(v, (int, float)) else v for k, v in a["settings"].items()}
+    cur = src.read()
+    if src.engine != "unreal":
+        missing = [k for k in want if k not in cur]
+        if missing:
+            raise ValueError(f"chiavi inesistenti: {missing}")
+    keep = a.get("save_to_profile", True)
+    if keep:
+        def fn(c):
+            prof = next((p for p in c["profiles"] if p.get("match") and p["match"].lower() in name.lower()), None)
+            if prof is None:
+                prof = {"name": name.removesuffix(".exe"), "match": name}
+                c["profiles"].append(prof)
+            prof.setdefault("graphics", {}).update(want)
+        common.update_config(fn)
+    if running:
+        return {"ok": True, "applied": False, "saved_to_profile": keep,
+                "note": "Il gioco è in esecuzione: le impostazioni verranno scritte appena lo chiudi "
+                        "(dopo che il gioco ha salvato le sue) e varranno dal prossimo avvio."
+                        + ("" if keep else " ATTENZIONE: senza save_to_profile non verranno applicate.")}
+    done, bak = apply_graphics(con, name, want)
+    return {"ok": True, "applied": True, "changed": done, "backup": bak, "saved_to_profile": keep}
+
+
 def t_health(_):
     return health.checks()
 
@@ -260,6 +341,15 @@ TOOLS = {
                       "hud": {"type": "boolean"}, "hud_position": {"type": ["string", "null"]},
                       "hud_style": {"type": ["string", "null"], "description": "bubble, compact, full o null (globale)"},
                       "notes": {"type": "string"}}, ["name"]),
+    "get_game_settings": (t_get_game_settings, "Impostazioni grafiche del gioco (in corso o per nome): motore, "
+                          "file, valori principali, impostazioni volute dal profilo, storico delle modifiche "
+                          "(all'avvio e durante il gioco). all=true per tutte le chiavi.",
+                          {"game": {"type": "string"}, "all": {"type": "boolean"}}),
+    "set_game_settings": (t_set_game_settings, "Cambia impostazioni grafiche di un gioco (valgono dal prossimo avvio, "
+                          "con backup). Se il gioco è aperto vengono scritte quando lo chiudi. save_to_profile=true "
+                          "(default) le salva nel profilo e le riapplica a ogni chiusura.",
+                          {"game": {"type": "string"}, "settings": {"type": "object"},
+                           "save_to_profile": {"type": "boolean"}}, ["game", "settings"]),
     "health_check": (t_health, "Controllo salute della BC-250 (servizi, governor, core, ventola, swap, VRR...).", {}),
     "get_config": (t_config, "Configurazione attuale (motore, avvisi, clock GPU di default, overlay).", {}),
 }

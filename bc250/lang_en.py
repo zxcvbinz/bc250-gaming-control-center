@@ -415,4 +415,8 @@ EN = {
     'Bianco': 'White',
     'Corallo': 'Coral',
     'Ambra': 'Amber',
+    "Grafica cambiata: {c}": "Graphics changed: {c}",
+    "Grafica all'avvio ({e}):": "Graphics at launch ({e}):",
+    "cambiata in gioco:": "changed in game:",
+    "applicata dal profilo:": "applied from profile:",
 }
