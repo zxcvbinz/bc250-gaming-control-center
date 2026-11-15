@@ -8,17 +8,17 @@ import threading
 import time
 from collections import deque
 
-from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
-from PyQt6.QtGui import QColor, QFont, QIcon, QLinearGradient, QPainter, QPainterPath, QPen
+from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, QTimer
+from PyQt6.QtGui import QColor, QFont, QIcon, QTextDocument, QLinearGradient, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QFrame,
                              QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
                              QListWidget, QListWidgetItem, QMessageBox, QPushButton, QScrollArea,
-                             QSlider, QSpinBox, QStackedWidget, QTableWidget, QTableWidgetItem, QTreeWidget, QTreeWidgetItem,
+                             QSizePolicy, QSlider, QSpinBox, QStackedWidget, QTableWidget, QTableWidgetItem, QTreeWidget, QTreeWidgetItem,
                              QVBoxLayout, QWidget)
 
 from . import common, health
 from .engine import write_control
-from .hudpaint import CENTER, DEMOS, IDLE, STYLES, WATCH, HudPainter, demo_state
+from .hudpaint import CENTER, DEMOS, IDLE, RING_DEFAULT, RING_SLOTS, STYLES, WATCH, HudPainter, demo_state
 from .install import FLATPAK_GL_APPS, flatpak_gl, flatpak_gl_enabled
 from .sensors import Sensors, governor_set
 
@@ -41,7 +41,14 @@ QPushButton#primary {{ background:{P['ACCENT']}; border:none; color:#fff; font-w
 QPushButton#danger {{ color:{P['BAD']}; }}
 QComboBox, QSpinBox, QLineEdit {{ background:{P['BG']}; border:1px solid {P['BORDER']}; border-radius:7px;
     padding:4px 8px; min-height:22px; }}
-QComboBox QAbstractItemView {{ background:{P['CARD']}; selection-background-color:{P['ACCENT']}; }}
+QComboBox {{ combobox-popup:0; }}
+QComboBox::drop-down {{ border:none; width:22px; }}
+QComboBox::down-arrow {{ image:url({ASSETS}/chevron.svg); width:12px; height:12px; }}
+QComboBox QAbstractItemView {{ background:{P['CARD2']}; color:{P['TEXT']}; border:1px solid {P['BORDER']};
+    border-radius:6px; padding:4px; outline:0; selection-background-color:{P['ACCENT']}; selection-color:#fff; }}
+QComboBox QAbstractItemView::item {{ min-height:24px; padding:2px 8px; }}
+QMenu {{ background:{P['CARD2']}; border:1px solid {P['BORDER']}; padding:4px; }}
+QMenu::item:selected {{ background:{P['ACCENT']}; }}
 QCheckBox {{ spacing:10px; background:transparent; }}
 QCheckBox::indicator {{ width:34px; height:18px; image:url({ASSETS}/switch-off.svg); }}
 QCheckBox::indicator:checked {{ image:url({ASSETS}/switch-on.svg); }}
@@ -58,7 +65,10 @@ QTreeWidget#hist::item:hover:!selected {{ background:{P['CARD']}; }}
 QScrollArea {{ border:none; }}
 QScrollBar:vertical {{ background:transparent; width:8px; }}
 QScrollBar::handle:vertical {{ background:{P['OFF']}; border-radius:4px; min-height:30px; }}
-QScrollBar::add-line, QScrollBar::sub-line {{ height:0; }}
+QScrollBar:horizontal {{ background:transparent; height:8px; }}
+QScrollBar::handle:horizontal {{ background:{P['OFF']}; border-radius:4px; min-width:30px; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ height:0; width:0; }}
+QScrollBar::add-page, QScrollBar::sub-page {{ background:transparent; }}
 """
 
 
@@ -74,8 +84,44 @@ def nav_icon(name):
     return out
 
 
+class WrapLabel(QLabel):
+    """QLabel che va a capo calcolando l'altezza sulla larghezza vera.
+    Il QLabel normale riserva l'altezza per una larghezza più stretta: card più alte del testo."""
+
+    def hasHeightForWidth(self):
+        return self.wordWrap() or super().hasHeightForWidth()
+
+    def heightForWidth(self, w):
+        if not self.wordWrap():
+            return super().heightForWidth(w)
+        m = self.contentsMargins()
+        doc = QTextDocument()
+        doc.setDefaultFont(self.font())
+        doc.setDocumentMargin(0)
+        doc.setHtml(self.text()) if self.textFormat() == Qt.TextFormat.RichText else doc.setPlainText(self.text())
+        doc.setTextWidth(max(1, w - m.left() - m.right()))
+        return int(doc.size().height()) + m.top() + m.bottom() + 1
+
+    def minimumSizeHint(self):
+        if not self.wordWrap():
+            return super().minimumSizeHint()
+        # il minimo vero lo dà heightForWidth: qui niente altezza riservata per larghezze strette
+        return QSize(0, self.heightForWidth(4000))
+
+    def sizeHint(self):
+        if not self.wordWrap():
+            return super().sizeHint()
+        w = self.width() if self.width() > 200 else 4000   # prima del layout la larghezza non è quella vera
+        return QSize(super().sizeHint().width(), self.heightForWidth(w))
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if self.wordWrap() and e.oldSize().width() != e.size().width():
+            self.updateGeometry()
+
+
 def label(text="", size=10, color=None, bold=False, wrap=False):
-    l = QLabel(text)
+    l = WrapLabel(text)
     f = QFont()
     f.setPointSizeF(size)
     f.setBold(bold)
@@ -91,6 +137,8 @@ class Card(QFrame):
     def __init__(self, title=None, subtitle=None):
         super().__init__()
         self.setObjectName("card")
+        # mai più alta del contenuto (le card affiancate vengono pareggiate a parte)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         self.lay = QVBoxLayout(self)
         self.lay.setContentsMargins(16, 12, 16, 14)
         self.lay.setSpacing(8)
@@ -386,6 +434,7 @@ class Dashboard:
         self.cpu_info = label("", 9, P["MUTED"])
         cc.lay.addWidget(self.cores)
         cc.lay.addWidget(self.cpu_info)
+        cc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)  # affiancate: stessa altezza
         mid.addWidget(cc, 3)
         gcard = Card("GPU — compute unit")
         self.grid = CuGrid()
@@ -393,6 +442,7 @@ class Dashboard:
         gcard.lay.addWidget(self.grid)
         gcard.lay.addWidget(self.cu_info)
         gcard.lay.addStretch()
+        gcard.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)  # affiancate: stessa altezza
         mid.addWidget(gcard, 2)
         lay.addLayout(mid)
         bot = QHBoxLayout()
@@ -402,6 +452,7 @@ class Dashboard:
             c = Card(title)
             c.lay.addWidget(l)
             c.lay.addStretch()
+            c.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)  # affiancate: stessa altezza
             bot.addWidget(c)
         lay.addLayout(bot)
         lay.addStretch()
@@ -587,7 +638,7 @@ class ProfilesPage:
         self.table.verticalHeader().hide()
         self.table.verticalHeader().setDefaultSectionSize(40)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setMinimumHeight(300)
+        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         c.lay.addWidget(self.table)
         c.lay.addWidget(label("Protezione calore: se la CPU supera la soglia, il limite FPS scende di 10 ogni 20 s; "
                               "quando torna 8°C sotto, risale. VRR: sul tuo monitor, all'avvio e alla chiusura del "
@@ -629,6 +680,7 @@ class ProfilesPage:
         self.extra = []
         for p in profs:
             self.add_row(p)
+        QTimer.singleShot(0, self.fit_table)
 
     def add_row(self, p):
         r = self.table.rowCount()
@@ -644,8 +696,17 @@ class ProfilesPage:
             cb.setCurrentIndex(idx)
             self.table.setCellWidget(r, 2 + i, cb)
         self.table.setItem(r, len(self.COLS) - 1, QTableWidgetItem(p.get("notes", "")))
+        self.fit_table()
         known = {"name", "match", "notes"} | {f[0] for f in common.PROFILE_FIELDS}
         self.extra.append({k: v for k, v in p.items() if k not in known})
+
+    def fit_table(self):
+        """Tabella alta quanto le sue righe: niente spazio vuoto nella card."""
+        t = self.table
+        h = t.horizontalHeader().height() + t.rowCount() * t.verticalHeader().defaultSectionSize() + 4
+        if t.horizontalScrollBar().isVisible() or t.horizontalHeader().length() > t.viewport().width():
+            h += t.horizontalScrollBar().sizeHint().height()
+        t.setFixedHeight(max(h, 90))
 
     def add(self):
         self.add_row({"name": "Nuovo gioco", "match": ""})
@@ -663,6 +724,7 @@ class ProfilesPage:
             self.table.removeRow(r)
             if r < len(self.extra):
                 self.extra.pop(r)
+        self.fit_table()
 
     def save(self):
         profs = []
@@ -817,8 +879,8 @@ class OverlayPage:
         for k, t in STYLES:
             self.style.addItem(t, k)
         self.style.setCurrentIndex(max(0, self.style.findData(o.get("style", "bubble"))))
-        a.lay.addWidget(row("Stile", self.style, "Cerchio: solo FPS, si allarga quando serve · Barra: una riga · "
-                            "Completo: grafico e tutte le metriche."))
+        a.lay.addWidget(row("Stile", self.style, "Cerchio: solo FPS, si allarga quando serve · Anello: FPS e 4 valori sempre "
+                            "visibili in 112 px · Barra: una riga · Completo: grafico e tutte le metriche."))
         self.only = QCheckBox()
         self.only.setChecked(o["only_in_game"])
         a.lay.addWidget(row("Solo mentre giochi", self.only, "Se spento resta sempre visibile sul desktop."))
@@ -844,12 +906,25 @@ class OverlayPage:
         a.lay.addWidget(row("Opacità sfondo", self.opacity))
         lay.addWidget(a)
 
-        self.bcard = Card("Cerchio intelligente")
+        self.bcard = Card("Cerchio e anello")
+        self.slots = []
+        slots = (o.get("ring") or {}).get("slots") or RING_DEFAULT
+        self.slot_rows = []
+        for i, where in enumerate(("in alto", "a destra", "in basso", "a sinistra")):
+            cb = QComboBox()
+            for k, t in RING_SLOTS:
+                cb.addItem(t, k)
+            cb.setCurrentIndex(max(0, cb.findData(slots[i] if i < len(slots) else RING_DEFAULT[i])))
+            self.slots.append(cb)
+            rw = row(f"Anello: valore {where}", cb)
+            self.slot_rows.append(rw)
+            self.bcard.lay.addWidget(rw)
         self.center = QComboBox()
         for k, t in CENTER:
             self.center.addItem(t, k)
         self.center.setCurrentIndex(max(0, self.center.findData(b.get("center", "fps"))))
-        self.bcard.lay.addWidget(row("Valore nel cerchio", self.center))
+        self.center_row = row("Valore nel cerchio", self.center)
+        self.bcard.lay.addWidget(self.center_row)
         self.idle = QComboBox()
         for k, t in IDLE:
             self.idle.addItem(t, k)
@@ -910,7 +985,7 @@ class OverlayPage:
 
         for w in [self.visible, self.only] + list(self.watch.values()) + list(self.items.values()):
             w.toggled.connect(self.save)
-        for w in (self.pos, self.style, self.center, self.idle):
+        for w in [self.pos, self.style, self.center, self.idle] + self.slots:
             w.activated.connect(self.save)
         for w in [self.margin, self.scale, self.opacity, self.hold] + list(self.th.values()):
             w.valueChanged.connect(self.save)
@@ -919,9 +994,13 @@ class OverlayPage:
         self.sync_cards()
 
     def sync_cards(self):
-        bubble = self.style.currentData() == "bubble"
-        self.bcard.setVisible(bubble)
-        self.icard.setVisible(not bubble)
+        style = self.style.currentData()
+        round_ = style in ("bubble", "ring")
+        self.bcard.setVisible(round_)
+        self.icard.setVisible(not round_)
+        self.center_row.setVisible(style == "bubble")
+        for rw in self.slot_rows:
+            rw.setVisible(style == "ring")
 
     def set_scenario(self, *_):
         self.preview.scenario = self.scen.currentData()
@@ -941,6 +1020,7 @@ class OverlayPage:
                 position=self.pos.currentData(), margin=self.margin.value(), style=self.style.currentData(),
                 scale=self.scale.value() / 100, opacity=self.opacity.value() / 100, items=items)
             c["overlay"].setdefault("bubble", {}).update(bub)
+            c["overlay"]["ring"] = {"slots": [cb.currentData() for cb in self.slots]}
         cfg = common.update_config(fn)
         self.sync_cards()
         self.preview.set_cfg(cfg)
@@ -1372,6 +1452,8 @@ class Main(QWidget):
 
 def main():
     app = QApplication(sys.argv)
+    # Fusion: stesso aspetto su ogni desktop (Breeze rendeva trasparenti i menu a tendina)
+    app.setStyle("Fusion")
     app.setApplicationName("bc250-control")
     app.setDesktopFileName("bc250-control")
     w = Main()

@@ -34,7 +34,8 @@ DEFAULTS = {
         "opacity": 0.82,
         "items": ["fps", "frametime", "cpu_temp", "gpu_temp", "gpu_clk", "power"],
         "graph": True,
-        "style": "bubble",        # bubble (cerchio intelligente), compact, full
+        "style": "bubble",        # bubble (cerchio intelligente), ring (anello completo), compact, full
+        "ring": {"slots": ["cpu_temp", "gpu_temp", "power", "gpu_clk"]},  # alto, destra, basso, sinistra
         # cerchio: mostra solo un valore e si allarga quando qualcosa richiede attenzione
         "bubble": {
             "center": "fps",      # fps, cpu_temp, gpu_temp, power
@@ -67,7 +68,7 @@ DEFAULTS = {
 }
 
 # campi dei profili: (chiave, etichetta, valori, formato) — usati da pannello in gioco e GUI
-STYLE_NAMES = {None: "come globale", "bubble": "cerchio", "compact": "barra", "full": "completo"}
+STYLE_NAMES = {None: "come globale", "bubble": "cerchio", "ring": "anello", "compact": "barra", "full": "completo"}
 POS_NAMES = {None: "come globale", "top-left": "alto sinistra", "top-center": "alto centro",
              "top-right": "alto destra", "bottom-left": "basso sinistra", "bottom-center": "basso centro", "bottom-right": "basso destra"}
 PROFILE_FIELDS = [

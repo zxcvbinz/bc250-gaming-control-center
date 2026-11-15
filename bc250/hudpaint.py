@@ -2,6 +2,7 @@
 
 Tre stili:
   bubble   cerchio con gli FPS che si allarga solo quando qualcosa richiede attenzione
+  ring     anello completo: FPS al centro e quattro valori sugli archi intorno, sempre visibili
   compact  una riga sola con le metriche scelte
   full     riquadro con FPS, grafico frametime e metriche
 """
@@ -15,13 +16,19 @@ from . import common
 
 P = common.PALETTE
 
-STYLES = [("bubble", "Cerchio intelligente"), ("compact", "Barra compatta"), ("full", "Completo")]
+STYLES = [("bubble", "Cerchio intelligente"), ("ring", "Anello completo"), ("compact", "Barra compatta"),
+          ("full", "Completo")]
 STYLE_NAMES = dict(STYLES)
 # cosa può far allargare il cerchio
 WATCH = [("cpu_temp", "CPU troppo calda"), ("gpu_temp", "GPU troppo calda"),
          ("fps_drop", "FPS sotto l'obiettivo"), ("stutter", "Scatti (1% low basso)"),
          ("throttling", "Taglio clock GPU"), ("ram", "RAM quasi piena"), ("fan", "Ventola ferma")]
 CENTER = [("fps", "FPS"), ("cpu_temp", "Temperatura CPU"), ("gpu_temp", "Temperatura GPU"), ("power", "Consumo")]
+# valori attorno all'anello (alto, destra, basso, sinistra)
+RING_SLOTS = [("cpu_temp", "Temperatura CPU"), ("gpu_temp", "Temperatura GPU"), ("power", "Consumo"),
+              ("gpu_clk", "Clock GPU"), ("gpu_busy", "Carico GPU"), ("cpu_load", "Carico CPU"),
+              ("ram", "RAM"), ("vram", "VRAM"), ("fan", "Ventola"), ("low1", "1% low")]
+RING_DEFAULT = ["cpu_temp", "gpu_temp", "power", "gpu_clk"]
 IDLE = [("visible", "Sempre visibile"), ("faded", "Quasi trasparente"), ("hidden", "Nascosto")]
 # secondi in cui una condizione deve durare prima di allargare il cerchio (evita lampi nei caricamenti)
 DEBOUNCE = {"fps_drop": 2.0, "stutter": 2.0, "cpu_temp": 1.0, "gpu_temp": 1.0}
@@ -188,10 +195,52 @@ def attention_cell(key, state, cfg):
     return key, "—"
 
 
+def ring_value(key, st, cfg):
+    """(etichetta, testo, frazione 0-1 dell'arco, colore) per un valore dell'anello."""
+    s = st.get("sensors") or {}
+    g = st.get("game") or {}
+    b = cfg["overlay"]["bubble"]
+    if key in ("cpu_temp", "gpu_temp"):
+        t = s.get(key)
+        warn = b.get(key, 85) - 8
+        col = temp_col(t, warn, b.get(key, 85))
+        return ("CPU" if key == "cpu_temp" else "GPU"), (f"{t:.0f}°" if t else "—"), \
+            max(0.0, min(1.0, ((t or 30) - 30) / 70)), col
+    if key == "power":
+        w = s.get("power")
+        return "W", (f"{w:.0f}" if w else "—"), min(1.0, (w or 0) / 160), P["PURPLE"]
+    if key == "gpu_clk":
+        c = s.get("gpu_clk")
+        return "MHz", (f"{c:.0f}" if c else "—"), min(1.0, (c or 0) / 2000), \
+            P["BAD"] if st.get("throttling") else P["ACCENT"]
+    if key in ("gpu_busy", "cpu_load"):
+        v = s.get(key)
+        return ("GPU%" if key == "gpu_busy" else "CPU%"), (f"{v:.0f}" if v is not None else "—"), \
+            min(1.0, (v or 0) / 100), P["ACCENT"]
+    if key in ("ram", "vram"):
+        r = s.get(key) or [0, 0]
+        f = r[0] / r[1] if r[0] and r[1] else 0
+        txt = (f"{r[0]:.1f}G" if key == "ram" else f"{r[0]:.0f}M") if r[0] else "—"
+        return key.upper(), txt, f, P["WARN"] if f > b.get("ram_pct", 90) / 100 else P["GOOD"]
+    if key == "fan":
+        f = s.get("fan")
+        return "RPM", (f"{f}" if f else "—"), min(1.0, (f or 0) / 2000), P["TEXT"] if f else P["BAD"]
+    if key == "low1":
+        lo, fps = g.get("low1"), g.get("fps")
+        return "1%", (f"{lo:.0f}" if lo else "—"), min(1.0, lo / fps) if lo and fps else 0, \
+            P["GOOD"] if lo and fps and lo >= fps * 0.75 else P["WARN"]
+    return key, "—", 0, P["MUTED"]
+
+
+RING_KEYS = {"cpu_temp": ("cpu_temp",), "gpu_temp": ("gpu_temp",), "gpu_clk": ("throttling",),
+             "ram": ("ram",), "fan": ("fan",), "low1": ("stutter",)}
+
+
 # ---------------------------------------------------------------- painter
 class HudPainter:
     """Stato e disegno dell'HUD. update() a ogni nuovo stato, step() per le animazioni."""
     D = 56        # diametro cerchio
+    DR = 112      # diametro anello completo
     CELL = 70     # larghezza di una voce nel cerchio allargato
 
     def __init__(self):
@@ -258,7 +307,7 @@ class HudPainter:
         self.alpha = self.alpha_target
 
     def visible(self, cfg):
-        if cfg["overlay"].get("style", "bubble") != "bubble":
+        if cfg["overlay"].get("style", "bubble") not in ("bubble", "ring"):
             return True
         return self.alpha > 0.01 or self.alpha_target > 0
 
@@ -267,6 +316,8 @@ class HudPainter:
         o = cfg["overlay"]
         sc = float(o["scale"])
         style = o.get("style", "bubble")
+        if style == "ring":
+            return int(math.ceil(self.DR * sc)) + 2, int(math.ceil(self.DR * sc)) + 2
         if style == "bubble":
             w = self.D + 12 + len(WATCH) * self.CELL if expanded else self.w_cur
             return int(math.ceil(w * sc)) + 2, int(math.ceil(self.D * sc)) + 2
@@ -291,6 +342,8 @@ class HudPainter:
         style = o.get("style", "bubble")
         if style == "bubble":
             self.paint_bubble(p, state, cfg, W / sc, H / sc)
+        elif style == "ring":
+            self.paint_ring(p, state, cfg)
         elif style == "compact":
             self.paint_compact(p, state, o, W / sc, H / sc)
         else:
@@ -373,6 +426,61 @@ class HudPainter:
             p.setPen(qc(col))
             p.drawText(QRectF(cell.left(), 22, cell.width(), 20), Qt.AlignmentFlag.AlignCenter, val)
         p.restore()
+
+    def paint_ring(self, p, st, cfg):
+        o = cfg["overlay"]
+        D = self.DR
+        R = D / 2
+        cx = cy = R + 1
+        g = st.get("game") or {}
+        p.setOpacity(max(0.0, min(1.0, self.alpha)))
+        # alone quando qualcosa richiede attenzione
+        alarm = None
+        if self.active:
+            cols = [self.colors[k] for k in self.active]
+            alarm = P["BAD"] if P["BAD"] in cols else P["WARN"]
+        p.setPen(QPen(qc(alarm, 220), 2.5) if alarm else QPen(qc(P["BORDER"], 160), 1))
+        p.setBrush(qc(P["BG"], int(255 * float(o["opacity"]))))
+        p.drawEllipse(QPointF(cx, cy), R - 1, R - 1)
+
+        slots = (o.get("ring") or {}).get("slots") or RING_DEFAULT
+        rr = QRectF(cx - R + 8, cy - R + 8, D - 16, D - 16)
+        # posizioni del testo: alto, destra, basso, sinistra
+        spots = [(0, -R * 0.56), (R * 0.56, 0), (0, R * 0.56), (-R * 0.56, 0)]
+        for i, key in enumerate(slots[:4]):
+            lab, txt, frac, col = ring_value(key, st, cfg)
+            for k in RING_KEYS.get(key, ()):
+                if k in self.active:
+                    col = self.colors[k]
+            mid = 90 - i * 90           # gradi Qt: 0 = destra, antiorario
+            start, span = mid + 38, -76
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            pen = QPen(qc(P["OFF"]), 4)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            p.setPen(pen)
+            p.drawArc(rr, int(start * 16), int(span * 16))
+            if frac > 0:
+                pen = QPen(qc(col), 4)
+                pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                p.setPen(pen)
+                p.drawArc(rr, int(start * 16), int(span * frac * 16))
+            dx, dy = spots[i]
+            box = QRectF(cx + dx - 22, cy + dy - 10, 44, 20)
+            p.setFont(font(8, True))
+            p.setPen(qc(col))
+            p.drawText(box.adjusted(0, -3, 0, -3), Qt.AlignmentFlag.AlignCenter, txt)
+            p.setFont(font(4.6, True))
+            p.setPen(qc(P["DIM"]))
+            p.drawText(QRectF(box.left(), box.bottom() - 6, box.width(), 7), Qt.AlignmentFlag.AlignCenter, lab)
+        # FPS al centro
+        fps = g.get("fps")
+        txt = f"{fps:.0f}" if fps else "—"
+        p.setFont(font(14 if len(txt) < 4 else 11.5, True))
+        p.setPen(qc(P["BAD"] if "fps_drop" in self.active else fps_col(fps, g.get("limit") or 0)))
+        p.drawText(QRectF(cx - 22, cy - 13, 44, 22), Qt.AlignmentFlag.AlignCenter, txt)
+        p.setFont(font(4.6, True))
+        p.setPen(qc(P["MUTED"]))
+        p.drawText(QRectF(cx - 22, cy + 7, 44, 8), Qt.AlignmentFlag.AlignCenter, "FPS")
 
     @staticmethod
     def compact_parts(st, o):

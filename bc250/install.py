@@ -1,4 +1,7 @@
-"""Installazione / aggiornamento del Centro di controllo BC-250 (solo file utente, niente root).
+"""Installazione / aggiornamento del Centro di controllo BC-250.
+
+Tutto in file utente, tranne la correzione del clock GPU per le BC-250 a 8 core
+(servizio di sistema, chiede sudo; si salta se sudo non è disponibile).
 
 python3 -m bc250.install            installa o aggiorna tutto
 python3 -m bc250.install --remove   rimuove servizi, scorciatoie, motore e collegamenti
@@ -194,6 +197,53 @@ def register_mcp():
     return r.returncode == 0
 
 
+SYS_LIB = "/usr/local/lib/bc250"
+SYS_UNIT = "/etc/systemd/system/bc250-metricsfix.service"
+GOV_UNIT = "cyan-skillfish-governor-smu.service"
+METRICSFIX_UNIT = f"""[Unit]
+Description=BC-250: real GPU clock in gpu_metrics and pp_dpm_sclk (8-core unlock)
+After={GOV_UNIT}
+PartOf={GOV_UNIT}
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -I {SYS_LIB}/metricsfix.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy={GOV_UNIT}
+"""
+
+
+def sudo(cmd, input=None):
+    r = subprocess.run(["sudo", "-n"] + cmd, input=input, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip() or f"sudo {' '.join(cmd)} fallito")
+    return r
+
+
+def install_metrics_fix():
+    """Copia root-owned dello script (il servizio gira come root: niente codice modificabile dall'utente)."""
+    if run(["systemctl", "cat", GOV_UNIT]).returncode != 0:
+        return False  # serve cyan-skillfish-governor con fix-freq
+    sudo(["install", "-D", "-m", "0644", "-o", "root", "-g", "root",
+          os.path.join(ROOT, "bc250", "metricsfix.py"), f"{SYS_LIB}/metricsfix.py"])
+    sudo(["tee", SYS_UNIT], input=METRICSFIX_UNIT)
+    sudo(["systemctl", "daemon-reload"])
+    sudo(["systemctl", "enable", "bc250-metricsfix.service"])
+    sudo(["systemctl", "restart", "bc250-metricsfix.service"])
+
+
+def remove_metrics_fix():
+    try:
+        sudo(["systemctl", "disable", "--now", "bc250-metricsfix.service"])
+        sudo(["rm", "-f", SYS_UNIT, f"{SYS_LIB}/metricsfix.py"])
+        sudo(["systemctl", "daemon-reload"])
+    except RuntimeError:
+        pass
+
+
 def install():
     steps = [
         ("Compilo il motore FPS", build_layer),
@@ -205,6 +255,7 @@ def install():
         ("Tolgo MangoHud dai giochi (dal prossimo accesso)", disable_mangohud_global),
         ("Motore OpenGL per Hytale (Flatpak)", lambda: [flatpak_gl(a) for a in FLATPAK_GL_APPS]),
         ("Server MCP per Claude Code", register_mcp),
+        ("Clock GPU reale per MangoHud/Steam/LACT (8 core, sudo)", install_metrics_fix),
     ]
     if not os.path.exists(common.CONF_PATH):
         common.save_config(common.load_config())
@@ -235,6 +286,7 @@ def remove():
             pass
     for a in FLATPAK_GL_APPS:
         flatpak_gl(a, False)
+    remove_metrics_fix()
     print("Rimosso. MangoHud tornerà attivo dal prossimo accesso.")
 
 

@@ -34,6 +34,9 @@ babysitting. This app keeps an eye on it while you play and lets you tune each g
   attention**: CPU/GPU too hot, FPS below target, stutter (low 1% lows), GPU clock throttling, RAM almost full
   or the fan stopped. When everything is fine it can stay visible, fade out or hide completely.
   A compact bar and a full panel are also available.
+- **Full ring overlay**: a 112 px watch-face with FPS in the middle and four live gauges around it
+  (CPU/GPU temperature, power, GPU clock, load, RAM, fan, 1% low: you pick them). Everything at a glance,
+  with a coloured halo when something needs attention.
 - **In-game details panel** (**Shift+F2**): live graphs, system info and an editable game profile, driven
   with the arrow keys.
 - **Per-game profiles**: FPS limit, max GPU clock, VRR, heat guard (drops 10 FPS every 20 s above a CPU
@@ -43,6 +46,11 @@ babysitting. This app keeps an eye on it while you play and lets you tune each g
 - **Session history** grouped by game: FPS, 1% lows, temperatures, clocks and power for every session.
   Alt+tab or long loading screens do not split a session.
 - **Health checks and alerts**: desktop notifications and on-screen toasts for temperature, fan and RAM.
+- **Real GPU clock for every tool on 8-core boards**: after the 8-core unlock the SMU metrics table
+  loses the GPU clock, so MangoHud, the Steam overlay and LACT show 3–100 MHz. `bc250-metricsfix`
+  (a small root service) writes the real clock, read by
+  [cyan-skillfish-governor](https://github.com/filippor/cyan-skillfish-governor) with `fix-freq = true`,
+  into `gpu_metrics` and `pp_dpm_sclk`.
 - **MCP server**: lets an AI assistant (e.g. Claude Code) read live stats and history, mark moments
   during a test and change FPS limits, GPU clock and profiles. Useful for finding the best settings together.
 
@@ -65,6 +73,7 @@ babysitting. This app keeps an eye on it while you play and lets you tune each g
 | `bc250-control` | The desktop app (PyQt6). |
 | `bc250ctl` | Quick commands: `toggle-limit`, `toggle-panel`, `toggle-hud`, `limit <n\|off>`, `status`. |
 | `bc250-mcp` | MCP server (stdio) for AI assistants. |
+| `bc250-metricsfix` | Root service (installed with `sudo`): real GPU clock in `gpu_metrics` / `pp_dpm_sclk` on 8-core BC-250s. Starts and restarts with the governor. |
 
 The GPU clock range is controlled through the D-Bus interface of
 [cyan-skillfish-governor](https://github.com/filippor/cyan-skillfish-governor).
