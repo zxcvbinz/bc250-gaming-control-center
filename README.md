@@ -152,5 +152,5 @@ A session stays open while a game is briefly gone (alt+tab, loading). If the sam
 
 ## Notes
 
-- The app UI is in Italian for now.
+- The app is available in **Italian and English** (picker at the bottom of the sidebar; the overlay and notifications follow it live). More languages: add a `bc250/lang_xx.py` file and an entry in `bc250/i18n.py`.
 - Tested on a BC-250 running Bazzite (Fedora 43), kernel 6.17, Mesa 26, with the 8-core unlock.

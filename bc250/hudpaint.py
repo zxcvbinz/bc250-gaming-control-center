@@ -13,9 +13,11 @@ from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainterPath, QPen
 
 from . import common
+from .i18n import T
 
 P = common.PALETTE
 
+# etichette in italiano come dati: si traducono con T() dove si mostrano
 STYLES = [("bubble", "Cerchio intelligente"), ("ring", "Anello completo"), ("compact", "Barra compatta"),
           ("full", "Completo")]
 STYLE_NAMES = dict(STYLES)
@@ -182,16 +184,16 @@ def attention_cell(key, state, cfg):
     if key == "gpu_temp":
         return "GPU", f"{s['gpu_temp']:.0f}°" if s.get("gpu_temp") else "—"
     if key == "fps_drop":
-        return "OBIETTIVO", f"{fps_target(g, cfg['overlay']['bubble'])}"
+        return T("OBIETTIVO"), f"{fps_target(g, cfg['overlay']['bubble'])}"
     if key == "stutter":
         return "1% LOW", f"{g['low1']:.0f}" if g.get("low1") else "—"
     if key == "throttling":
-        return "CLOCK GPU", f"{s['gpu_clk']:.0f}" if s.get("gpu_clk") else "—"
+        return T("CLOCK GPU"), f"{s['gpu_clk']:.0f}" if s.get("gpu_clk") else "—"
     if key == "ram":
         r = s.get("ram") or [0, 0]
         return "RAM", f"{100 * r[0] / r[1]:.0f}%" if r[1] else "—"
     if key == "fan":
-        return "VENTOLA", f"{s.get('fan') or 0}"
+        return T("VENTOLA"), f"{s.get('fan') or 0}"
     return key, "—"
 
 
@@ -587,5 +589,5 @@ def demo_state(kind, cfg):
     fts = [1000 / fps + (7 if kind == "drop" and i % 17 == 0 else 0) + math.sin(i * 0.7 + t) * 0.4
            for i in range(120)]
     return {"ts": time.time(), "sensors": s, "throttling": thr, "alerts": [],
-            "game": {"name": "Gioco di prova", "fps": fps, "low1": low, "frametime": fts[-1],
+            "game": {"name": T("Gioco di prova"), "fps": fps, "low1": low, "frametime": fts[-1],
                      "frametimes": fts, "limit": limit, "api": "Vulkan"}}

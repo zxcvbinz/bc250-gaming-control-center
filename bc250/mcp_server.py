@@ -9,9 +9,11 @@ import sqlite3
 import sys
 import time
 
-from . import common, health
+from . import common, health, i18n
 from .engine import write_control
 from .sensors import governor_range, governor_set
+
+i18n.set_lang("it")  # le risposte MCP (anche health.checks) restano in italiano
 
 PROTOCOL = "2025-06-18"
 

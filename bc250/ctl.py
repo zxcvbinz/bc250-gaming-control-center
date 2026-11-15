@@ -11,6 +11,7 @@ import sys
 
 from . import common
 from .engine import write_control
+from .i18n import T
 
 
 def _limit_text(cfg):
@@ -22,8 +23,8 @@ def _limit_text(cfg):
         if p.get("name") == prof and p.get("fps_limit") is not None:
             lim = p["fps_limit"]
     if not e["limit_enabled"]:
-        return "Limite FPS: DISATTIVATO"
-    return f"Limite FPS: {lim} ATTIVO" if lim else "Limite FPS: nessuno"
+        return T("Limite FPS: DISATTIVATO")
+    return T("Limite FPS: {lim} ATTIVO", lim=lim) if lim else T("Limite FPS: nessuno")
 
 
 def main(argv=None):
@@ -44,7 +45,7 @@ def main(argv=None):
         common.overlay_send("toggle-panel")
     elif cmd == "toggle-hud":
         cfg = common.update_config(lambda c: c["overlay"].update(hud_visible=not c["overlay"]["hud_visible"]))
-        common.overlay_send("toast:Overlay " + ("visibile" if cfg["overlay"]["hud_visible"] else "nascosto"))
+        common.overlay_send("toast:" + (T("Overlay visibile") if cfg["overlay"]["hud_visible"] else T("Overlay nascosto")))
     elif cmd == "status":
         print(json.dumps(common.read_state(), indent=2, ensure_ascii=False))
     else:

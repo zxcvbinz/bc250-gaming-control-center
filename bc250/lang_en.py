@@ -1,0 +1,400 @@
+"""English. Keys are the Italian source strings (see i18n.py); a missing key falls back to Italian.
+Placeholders ({v}, {n}, ...) must be the same as in the key."""
+
+EN = {
+    # ------------------------------------------------ common: profile fields and values
+    "Limite FPS": "FPS limit",
+    "Clock GPU max": "Max GPU clock",
+    "Protezione calore": "Heat guard",
+    "Posizione overlay": "Overlay position",
+    "Stile overlay": "Overlay style",
+    "globale": "global",
+    "nessuno": "none",
+    "{v} FPS": "{v} FPS",
+    "normale": "normal",
+    "automatico": "automatic",
+    "spento": "off",
+    "spenta": "off",
+    "visibile": "visible",
+    "nascosto": "hidden",
+    "come globale": "as global",
+    "cerchio": "circle",
+    "anello": "ring",
+    "barra": "bar",
+    "completo": "full",
+    "alto sinistra": "top left",
+    "alto centro": "top center",
+    "alto destra": "top right",
+    "basso sinistra": "bottom left",
+    "basso centro": "bottom center",
+    "basso destra": "bottom right",
+
+    # ------------------------------------------------ ctl / daemon (toasts, notifications)
+    "Limite FPS: DISATTIVATO": "FPS limit: OFF",
+    "Limite FPS: {lim} ATTIVO": "FPS limit: {lim} ON",
+    "Limite FPS: nessuno": "FPS limit: none",
+    "Overlay visibile": "Overlay visible",
+    "Overlay nascosto": "Overlay hidden",
+    "Protezione calore: CPU {t:.0f}°C → limite {lim} FPS": "Heat guard: CPU {t:.0f}°C → limit {lim} FPS",
+    "Protezione calore: limite ripristinato": "Heat guard: limit restored",
+    "CPU a {t:.0f}°C": "CPU at {t:.0f}°C",
+    "GPU a {t:.0f}°C": "GPU at {t:.0f}°C",
+    "Soglia {v}°C superata.": "{v}°C threshold exceeded.",
+    "Ventola a {v} rpm": "Fan at {v} rpm",
+    "La ventola sembra ferma o lenta!": "The fan seems stopped or slow!",
+    "RAM quasi piena": "RAM almost full",
+    "{u:.1f}/{t:.1f} GiB usati.": "{u:.1f}/{t:.1f} GiB used.",
+
+    # ------------------------------------------------ health checks
+    "Servizio BC-250 (bc250d)": "BC-250 service (bc250d)",
+    "Raccoglie sensori, FPS, storico e avvisi.": "Collects sensors, FPS, history and alerts.",
+    "Non risponde: niente overlay, storico e avvisi.": "Not responding: no overlay, history or alerts.",
+    "Riavvia": "Restart",
+    "Overlay in gioco": "In-game overlay",
+    "HUD, pannello Shift+F2 e avvisi a schermo.": "HUD, Shift+F2 panel and on-screen alerts.",
+    "Motore FPS (Vulkan / Proton)": "FPS engine (Vulkan / Proton)",
+    "Conta gli FPS e applica il limite in tutti i giochi Vulkan.": "Counts FPS and applies the limit in all Vulkan games.",
+    "Installa": "Install",
+    "MangoHud rimosso dai giochi": "MangoHud removed from games",
+    "Disattivato, ma vale dal prossimo accesso: esci e rientra nella sessione.":
+        "Disabled, but applies from the next login: log out and back in.",
+    "MangoHud è ancora caricato in tutti i giochi (doppio HUD/limite).":
+        "MangoHud is still loaded in every game (double HUD/limit).",
+    "Il motore BC-250 lo sostituisce.": "The BC-250 engine replaces it.",
+    "Disattiva": "Disable",
+    "Governor GPU": "GPU governor",
+    "Gestisce clock e tensione della GPU e taglia a {t}°C.": "Manages GPU clock and voltage, throttles at {t}°C.",
+    "FERMO: la GPU resta a clock fisso!": "STOPPED: the GPU is stuck at a fixed clock!",
+    "Avvia": "Start",
+    "Lettura clock GPU": "GPU clock reading",
+    "Sblocco 8 core": "8-core unlock",
+    "{c} core / {t} thread attivi.": "{c} cores / {t} threads active.",
+    "Il servizio bc250-8core riapplica lo sblocco a ogni avvio.": "The bc250-8core service reapplies the unlock at every boot.",
+    "Servizio sblocco all'avvio": "Unlock service at boot",
+    "bc250-8core.service abilitato.": "bc250-8core.service enabled.",
+    "Ventola": "Fan",
+    "{v} rpm (gira sempre al massimo, non regolabile).": "{v} rpm (always at full speed, not adjustable).",
+    "Temperature": "Temperatures",
+    "CPU {c:.0f}°C · GPU {g:.0f}°C con carico CPU {l:.0f}%.": "CPU {c:.0f}°C · GPU {g:.0f}°C at {l:.0f}% CPU load.",
+    "Alte a riposo: controlla polvere/pasta termica.": "High at idle: check dust/thermal paste.",
+    "{v:.0f} GiB disponibili (zram + swapfile): evita i freeze da RAM piena.":
+        "{v:.0f} GiB available (zram + swapfile): prevents freezes when RAM is full.",
+    "Protezione RAM (systemd-oomd)": "RAM protection (systemd-oomd)",
+    "Chiude il processo che esaurisce la memoria invece di bloccare il PC.":
+        "Kills the process that runs out of memory instead of freezing the PC.",
+    "Memoria in uso": "Memory in use",
+    "{m} Hz · VRR: {v}. Questo monitor col VRR cambia luminosità (sfarfallio): meglio tenerlo spento.":
+        "{m} Hz · VRR: {v}. This monitor changes brightness with VRR (flicker): better keep it off.",
+    "Servizio riavviato.": "Service restarted.",
+    "Overlay riavviato.": "Overlay restarted.",
+    "Motore installato: vale dal prossimo avvio dei giochi.": "Engine installed: applies the next time games start.",
+    "MangoHud disattivato: vale dal prossimo accesso alla sessione.": "MangoHud disabled: applies from the next login.",
+    "Governor avviato.": "Governor started.",
+    "VRR impostato su automatico.": "VRR set to automatic.",
+    "Nessuna correzione automatica.": "No automatic fix.",
+
+    # ------------------------------------------------ hudpaint (in-game HUD)
+    "Cerchio intelligente": "Smart circle",
+    "Anello completo": "Full ring",
+    "Barra compatta": "Compact bar",
+    "Completo": "Full",
+    "CPU troppo calda": "CPU too hot",
+    "GPU troppo calda": "GPU too hot",
+    "FPS sotto l'obiettivo": "FPS below target",
+    "Scatti (1% low basso)": "Stutter (low 1% low)",
+    "Taglio clock GPU": "GPU clock throttling",
+    "Ventola ferma": "Fan stopped",
+    "Temperatura CPU": "CPU temperature",
+    "Temperatura GPU": "GPU temperature",
+    "Consumo": "Power",
+    "Clock GPU": "GPU clock",
+    "Carico GPU": "GPU load",
+    "Carico CPU": "CPU load",
+    "Sempre visibile": "Always visible",
+    "Quasi trasparente": "Almost transparent",
+    "Nascosto": "Hidden",
+    "OBIETTIVO": "TARGET",
+    "CLOCK GPU": "GPU CLOCK",
+    "VENTOLA": "FAN",
+    "Demo: tutto regolare": "Demo: all good",
+    "Demo: CPU calda": "Demo: hot CPU",
+    "Demo: FPS in calo e scatti": "Demo: FPS drop and stutter",
+    "Demo: GPU calda, clock tagliato": "Demo: hot GPU, clock throttled",
+    "Gioco di prova": "Test game",
+
+    # ------------------------------------------------ overlay (Shift+F2 panel, toasts)
+    "Nessun gioco attivo": "No game running",
+    "profilo: {p}": "profile: {p}",
+    "nessun profilo": "no profile",
+    "LIMITE FPS DISATTIVATO": "FPS LIMIT OFF",
+    "LIMITE {v} FPS · PROTEZIONE CALORE": "LIMIT {v} FPS · HEAT GUARD",
+    "LIMITE {v} FPS · ATTIVO": "LIMIT {v} FPS · ON",
+    "NESSUN LIMITE FPS": "NO FPS LIMIT",
+    "LIMITE {v} FPS · PRONTO": "LIMIT {v} FPS · READY",
+    "NESSUN LIMITE": "NO LIMIT",
+    "media 60s": "avg (60s)",
+    "frametime ultimi 120 frame (ms)": "frametime, last 120 frames (ms)",
+    "Clock GPU (max {v})": "GPU clock (max {v})",
+    "min {a}  max {b}": "min {a}  max {b}",
+    "Sistema": "System",
+    "Taglio": "Throttle",
+    "IN CORSO": "ACTIVE",
+    "Profilo del gioco": "Game profile",
+    "(nuovo)": "(new)",
+    "↑ ↓ scegli  ·  ← → cambia  ·  Esc chiudi  ·  si salva da solo":
+        "↑ ↓ select  ·  ← → change  ·  Esc close  ·  saved automatically",
+    "VRR: al cambio lo schermo diventa nero per un attimo": "VRR: the screen goes black for a moment when it changes",
+    "Avvia un gioco per modificarne il profilo da qui.": "Start a game to edit its profile from here.",
+    "Shift+F1 limite FPS   Shift+F2 pannello   Shift+F3 overlay": "Shift+F1 FPS limit   Shift+F2 panel   Shift+F3 overlay",
+    "DISATTIVATO": "OFF",
+
+    # ------------------------------------------------ GUI: sidebar
+    "Panoramica": "Overview",
+    "Giochi e FPS": "Games & FPS",
+    "Profili": "Profiles",
+    "Salute": "Health",
+    "Storico": "History",
+    "Avvisi": "Alerts",
+    "Lingua": "Language",
+    "servizio attivo": "service running",
+    "servizio fermo — vedi Salute": "service stopped — see Health",
+
+    # ------------------------------------------------ GUI: overview
+    "Consumo SoC": "SoC power",
+    "In gioco": "In game",
+    "CPU — core fisici": "CPU — physical cores",
+    "GPU — compute unit": "GPU — compute units",
+    "Temperature scheda": "Board temperatures",
+    "Memoria": "Memory",
+    "limite {v}": "limit {v}",
+    "nessun limite": "no limit",
+    "profilo <b>{p}</b>": "profile <b>{p}</b>",
+    "Nessun gioco attivo.": "No game running.",
+    "{c} core / {t} thread · carico {l:.0f}%": "{c} cores / {t} threads · load {l:.0f}%",
+    "sblocco 8 core attivo": "8-core unlock active",
+    "{n} / 40 CU attive": "{n} / 40 CUs active",
+    "(stima: umr non leggibile)": "(estimate: umr not readable)",
+    "Range": "Range",
+    "Taglio a": "Throttles at",
+    "ripresa": "recovers at",
+    "Stato": "State",
+    "sta tagliando il clock": "throttling the clock",
+    "bloccato": "locked",
+
+    # ------------------------------------------------ GUI: games & FPS
+    "Nessun limite": "No limit",
+    "82 (metà di 165)": "82 (half of 165)",
+    "Il motore BC-250 conta gli FPS e applica il limite direttamente dentro i giochi, al posto di MangoHud. "
+    "Le modifiche valgono subito, anche a gioco aperto.":
+        "The BC-250 engine counts FPS and applies the limit right inside games, instead of MangoHud. "
+        "Changes apply immediately, even while a game is running.",
+    "Limite FPS attivo": "FPS limit enabled",
+    "Shift+F1 lo accende e spegne mentre giochi.": "Shift+F1 turns it on and off while you play.",
+    "Limite per tutti i giochi": "Limit for all games",
+    "I giochi con un profilo usano il limite del profilo. Con VRR attivo, valori sotto i 165 Hz restano fluidi.":
+        "Games with a profile use the profile's limit. With VRR on, values below 165 Hz stay smooth.",
+    "Motore FPS attivo": "FPS engine enabled",
+    "Se lo spegni il gioco non viene più misurato né limitato.": "When off, games are no longer measured or limited.",
+    "Giochi in esecuzione": "Running games",
+    "Giochi OpenGL": "OpenGL games",
+    "I giochi Vulkan e Proton (quasi tutti quelli Steam) sono coperti in automatico. "
+    "Quelli OpenGL vanno attivati uno per uno.":
+        "Vulkan and Proton games (almost all Steam games) are covered automatically. "
+        "OpenGL ones must be enabled one by one.",
+    "{a}: riavvia l'app per applicare.": "{a}: restart the app to apply.",
+    "App Flatpak — vale dal prossimo avvio.": "Flatpak app — applies from the next launch.",
+    "Giochi Steam OpenGL nativi": "Native OpenGL Steam games",
+    "Copia questo testo in Proprietà → Opzioni di avvio del gioco.": "Copy this text into the game's Properties → Launch Options.",
+    "Togli MangoHud dai giochi": "Remove MangoHud from games",
+    "Resta installato: puoi riattivarlo qui. Vale dal prossimo accesso alla sessione.":
+        "It stays installed: you can re-enable it here. Applies from the next login.",
+    "Limite FPS: {v}": "FPS limit: {v}",
+    "Limite FPS: disattivato": "FPS limit: off",
+    "Salvato: vale dal prossimo accesso alla sessione.": "Saved: applies from the next login.",
+    "limite applicato <b>{v}</b>": "limit applied <b>{v}</b>",
+    "Nessun gioco sta disegnando frame.": "No game is drawing frames.",
+    "MangoHud è ancora caricato nella sessione attuale.": "MangoHud is still loaded in the current session.",
+    "MangoHud non viene più caricato nei giochi.": "MangoHud is no longer loaded in games.",
+
+    # ------------------------------------------------ GUI: profiles
+    "Profili per gioco": "Game profiles",
+    "Quando un gioco parte, il suo profilo imposta limite FPS, clock GPU, VRR, protezione calore e overlay. "
+    "Alla chiusura torna tutto normale. Puoi modificarli anche in gioco con Shift+F2.":
+        "When a game starts, its profile sets FPS limit, GPU clock, VRR, heat guard and overlay. "
+        "Everything goes back to normal when it closes. You can also edit them in game with Shift+F2.",
+    "Nome": "Name",
+    "Riconosci (processo o appid:ID)": "Match (process or appid:ID)",
+    "Note": "Notes",
+    "Protezione calore: se la CPU supera la soglia, il limite FPS scende di 10 ogni 20 s; quando torna 8°C sotto, "
+    "risale. VRR: sul tuo monitor, all'avvio e alla chiusura del gioco lo schermo diventa nero per un attimo.":
+        "Heat guard: if the CPU goes over the threshold, the FPS limit drops by 10 every 20 s; once it is 8°C "
+        "below, it goes back up. VRR: on your monitor the screen goes black for a moment when the game starts and closes.",
+    "Aggiungi": "Add",
+    "Dal gioco in corso": "From running game",
+    "Elimina": "Delete",
+    "Salva": "Save",
+    "Clock GPU normale (senza profilo)": "Normal GPU clock (no profile)",
+    "Minimo": "Minimum",
+    "Massimo": "Maximum",
+    "Più alto = più FPS ma più calore. Il governor taglia comunque a 85°C. Con una sola ventola, "
+    "1750 è un buon compromesso.":
+        "Higher = more FPS but more heat. The governor throttles at 85°C anyway. With a single fan, "
+        "1750 is a good compromise.",
+    "Applica": "Apply",
+    "Nuovo gioco": "New game",
+    "Nessun gioco in corso.": "No game running.",
+    "{n} profili salvati.": "{n} profiles saved.",
+    "Clock GPU {a}–{b} MHz": "GPU clock {a}–{b} MHz",
+    "(governor non raggiungibile!)": "(governor unreachable!)",
+
+    # ------------------------------------------------ GUI: overlay
+    "Grafico frametime": "Frametime graph",
+    "In alto a sinistra": "Top left",
+    "In alto al centro": "Top center",
+    "In alto a destra": "Top right",
+    "In basso a sinistra": "Bottom left",
+    "In basso al centro": "Bottom center",
+    "In basso a destra": "Bottom right",
+    "Overlay spento: in gioco non si vede (Shift+F3 per accenderlo)": "Overlay off: not shown in game (Shift+F3 to turn it on)",
+    "Cosa vedi sopra i giochi. Con il «cerchio intelligente» resta piccolo in un angolo e si allarga solo "
+    "quando qualcosa richiede attenzione.":
+        "What you see on top of games. The “smart circle” stays small in a corner and expands only "
+        "when something needs attention.",
+    "Anteprima": "Preview",
+    "Dati live (se stai giocando)": "Live data (if you're playing)",
+    "Simula": "Simulate",
+    "Le demo mostrano come reagisce il cerchio, con gli stessi tempi del gioco (si allarga dopo 1-2 s, "
+    "si richiude dopo la tenuta).":
+        "The demos show how the circle reacts, with the same timing as in game (expands after 1-2 s, "
+        "shrinks back after the hold time).",
+    "Aspetto": "Appearance",
+    "Overlay attivo": "Overlay enabled",
+    "Shift+F3 lo accende e spegne anche in gioco.": "Shift+F3 turns it on and off in game too.",
+    "Stile": "Style",
+    "Cerchio: solo FPS, si allarga quando serve · Anello: FPS e 4 valori sempre visibili in 112 px · "
+    "Barra: una riga · Completo: grafico e tutte le metriche.":
+        "Circle: FPS only, expands when needed · Ring: FPS and 4 values always visible in 112 px · "
+        "Bar: one line · Full: graph and all metrics.",
+    "Solo mentre giochi": "Only while gaming",
+    "Se spento resta sempre visibile sul desktop.": "When off it stays visible on the desktop too.",
+    "Posizione": "Position",
+    "Un profilo può usare una posizione diversa per quel gioco.": "A profile can use a different position for that game.",
+    "Distanza dal bordo": "Distance from edge",
+    "Dimensione": "Size",
+    "Opacità sfondo": "Background opacity",
+    "Cerchio e anello": "Circle and ring",
+    "Anello: valore in alto": "Ring: top value",
+    "Anello: valore a destra": "Ring: right value",
+    "Anello: valore in basso": "Ring: bottom value",
+    "Anello: valore a sinistra": "Ring: left value",
+    "Valore nel cerchio": "Value in the circle",
+    "Quando va tutto bene": "When all is well",
+    "«Nascosto»: in gioco non vedi niente finché non c'è un problema.": "“Hidden”: you see nothing in game until there is a problem.",
+    "Resta allargato per": "Stays expanded for",
+    "Dopo che il problema è sparito.": "After the problem is gone.",
+    "SI ALLARGA QUANDO": "EXPANDS WHEN",
+    "CPU calda da": "CPU hot from",
+    "GPU calda da": "GPU hot from",
+    "Il governor taglia il clock a 85°C.": "The governor throttles the clock at 85°C.",
+    "Percentuale del limite FPS del gioco.": "Percentage of the game's FPS limit.",
+    "Obiettivo senza limite FPS": "Target without FPS limit",
+    "Scatti: 1% low sotto": "Stutter: 1% low below",
+    " % degli FPS": " % of FPS",
+    "RAM piena da": "RAM full from",
+    "Cosa mostrare (barra e completo)": "What to show (bar and full)",
+    "Tasti rapidi": "Shortcuts",
+    "limite FPS on/off": "FPS limit on/off",
+    "pannello dettagli": "details panel",
+    "mostra/nascondi overlay": "show/hide overlay",
+    "Si cambiano in Impostazioni di sistema → Scorciatoie → «BC-250».": "Change them in System Settings → Shortcuts → “BC-250”.",
+    "Apri pannello dettagli ora": "Open details panel now",
+
+    # ------------------------------------------------ GUI: display
+    "VRR (FreeSync): il monitor si adatta agli FPS del gioco. Niente tearing e niente scatti anche sotto i 165 Hz. "
+    "Funziona nei giochi a schermo intero.":
+        "VRR (FreeSync): the monitor follows the game's FPS. No tearing and no stutter even below 165 Hz. "
+        "Works in fullscreen games.",
+    "Automatico": "Automatic",
+    "VRR solo nei giochi": "VRR only in games",
+    "Il servizio BC-250 lo accende quando parte un gioco e lo spegne alla chiusura (schermo nero per un attimo). "
+    "Il gioco deve essere a schermo intero.":
+        "The BC-250 service turns it on when a game starts and off when it closes (black screen for a moment). "
+        "The game must be fullscreen.",
+    "VRR solo nei giochi: attivo": "VRR only in games: on",
+    "VRR solo nei giochi: disattivato (lo gestisci a mano qui sotto)": "VRR only in games: off (manage it manually below)",
+    "Schermo {n} — {m} Hz": "Screen {n} — {m} Hz",
+    "Mai": "Never",
+    "Automatico (giochi a schermo intero)": "Automatic (fullscreen games)",
+    "Sempre": "Always",
+    "VRR / FreeSync (manuale)": "VRR / FreeSync (manual)",
+    "Con «VRR solo nei giochi» attivo lo decide il servizio. Sul desktop il tuo monitor col VRR sfarfalla.":
+        "With “VRR only in games” on, the service decides. On the desktop your monitor flickers with VRR.",
+    "Risoluzione e frequenza": "Resolution and refresh rate",
+    "Errore nel cambiare il VRR": "Error changing VRR",
+    "Modalità cambiata (KDE chiede conferma se serve).": "Mode changed (KDE asks for confirmation if needed).",
+    "Errore": "Error",
+
+    # ------------------------------------------------ GUI: health
+    "Controlli per assicurarti che la BC-250 giri al meglio.": "Checks to make sure the BC-250 runs at its best.",
+    "Ricontrolla": "Check again",
+    "Consigli": "Tips",
+    "La ventola è una sola e gira sempre al massimo: il limite vero è il raffreddamento. Una seconda ventola "
+    "sul dissipatore o una più potente è l'upgrade che rende di più.":
+        "There is only one fan and it always runs at full speed: cooling is the real limit. A second fan on the "
+        "heatsink or a stronger one is the upgrade that pays off most.",
+    "Pasta termica nuova e dissipatore pulito: −5/−10°C tipici su queste schede.":
+        "Fresh thermal paste and a clean heatsink: typically −5/−10°C on these boards.",
+    "Usa un limite FPS (60–90) con VRR: meno calore, stessa fluidità percepita.":
+        "Use an FPS limit (60–90) with VRR: less heat, same perceived smoothness.",
+    "Nei giochi con generazione del mondo (Hytale, Minecraft) abbassa la distanza visiva: pesa sulla CPU.":
+        "In games with world generation (Hytale, Minecraft) lower the view distance: it loads the CPU.",
+    "Profili per gioco: clock GPU più basso nei giochi leggeri = scheda più fresca.":
+        "Game profiles: a lower GPU clock in light games = a cooler board.",
+    "Non riuscito: {m}": "Failed: {m}",
+
+    # ------------------------------------------------ GUI: history
+    "Storico partite": "Game history",
+    "Partite raggruppate per gioco: scegli un gioco per il riepilogo di tutte le sessioni, o una sessione per il "
+    "dettaglio. Se esci dal gioco (alt+tab, caricamenti) e torni entro 5 minuti è la stessa sessione. "
+    "I segni viola li aggiunge Claude durante i test.":
+        "Sessions grouped by game: pick a game for a summary of all its sessions, or a session for the details. "
+        "If you leave the game (alt+tab, loading) and come back within 5 minutes it is the same session. "
+        "The purple marks are added by Claude during tests.",
+    "Riepilogo": "Summary",
+    "Clock GPU e consumo": "GPU clock and power",
+    "Aggiorna": "Refresh",
+    "1 sessione": "1 session",
+    "{n} sessioni": "{n} sessions",
+    "{d} · ultima {last}": "{d} · last {last}",
+    "Ancora nessuna partita registrata.": "No sessions recorded yet.",
+    "FPS medi": "Avg FPS",
+    "1% low medio": "avg 1% low",
+    "consumo medio": "avg power",
+    "taglio clock": "clock throttling",
+    "{v:.0f}% del tempo": "{v:.0f}% of the time",
+    "Clock GPU MHz": "GPU clock MHz",
+    "Consumo W ×10": "Power W ×10",
+    "Nessun dato.": "No data.",
+    "lun": "Mon", "mar": "Tue", "mer": "Wed", "gio": "Thu", "ven": "Fri", "sab": "Sat", "dom": "Sun",
+    "{n} sessioni · in gioco {d} · dal {a} al {b}": "{n} sessions · played {d} · from {a} to {b}",
+    "profilo {p}": "profile {p}",
+    "Grafici: tutte le sessioni una dopo l'altra, le linee viola separano le sessioni.":
+        "Charts: all sessions one after another, purple lines separate the sessions.",
+    "in gioco {d}": "played {d}",
+    "(fuori dal gioco {d})": "(away from the game {d})",
+
+    # ------------------------------------------------ GUI: alerts
+    "Notifica sul desktop e messaggio sopra il gioco quando qualcosa va storto.":
+        "Desktop notification and an on-screen message over the game when something goes wrong.",
+    "Avvisi attivi": "Alerts enabled",
+    "CPU oltre": "CPU above",
+    "La CPU (Zen 2) è al limite a 97°C.": "The CPU (Zen 2) hits its limit at 97°C.",
+    "GPU oltre": "GPU above",
+    "Ventola sotto": "Fan below",
+    "La tua gira a ~1080 rpm: sotto questa soglia è ferma o guasta.":
+        "Yours runs at ~1080 rpm: below this threshold it is stopped or broken.",
+    "Non ripetere prima di": "Don't repeat within",
+    "Avvisi salvati.": "Alerts saved.",
+    "Prova una notifica": "Send a test notification",
+    "Le notifiche funzionano.": "Notifications work.",
+}

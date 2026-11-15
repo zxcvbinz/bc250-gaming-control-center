@@ -11,7 +11,8 @@ import sys
 import threading
 import time
 
-from . import common, health
+from . import common, health, i18n
+from .i18n import T
 from .engine import FrameSource, write_control
 from .sensors import Sensors, governor_config, governor_range, governor_set
 
@@ -191,6 +192,7 @@ class Daemon:
         if m != self.cfg_mtime:
             self.cfg_mtime = m
             self.cfg = common.load_config()
+            i18n.set_lang(self.cfg.get("language", "it"))
             self.apply_control()
             if self.game:  # riapplica profilo e limite al gioco in corso
                 self.apply_profile(self.game, self.profile)
@@ -245,13 +247,14 @@ class Daemon:
             self.guard_cut += 10
             self.guard_t = now
             self.apply_limit(game)
-            common.overlay_send(f"toast:Protezione calore: CPU {t:.0f}°C → limite {max(40, base - self.guard_cut)} FPS")
+            common.overlay_send("toast:" + T("Protezione calore: CPU {t:.0f}°C → limite {lim} FPS",
+                                              t=t, lim=max(40, base - self.guard_cut)))
         elif self.guard_cut and t <= thr - 8 and now - self.guard_t >= 30:
             self.guard_cut -= 10
             self.guard_t = now
             self.apply_limit(game)
             if not self.guard_cut:
-                common.overlay_send("toast:Protezione calore: limite ripristinato")
+                common.overlay_send("toast:" + T("Protezione calore: limite ripristinato"))
 
     def gap(self):
         return float(self.cfg["history"].get("merge_gap_s", 300))
@@ -316,13 +319,13 @@ class Daemon:
             return
         checks = []
         if s.get("cpu_temp") and s["cpu_temp"] >= a["cpu_temp"]:
-            checks.append(("cpu", f"CPU a {s['cpu_temp']:.0f}°C", f"Soglia {a['cpu_temp']}°C superata."))
+            checks.append(("cpu", T("CPU a {t:.0f}°C", t=s["cpu_temp"]), T("Soglia {v}°C superata.", v=a["cpu_temp"])))
         if s.get("gpu_temp") and s["gpu_temp"] >= a["gpu_temp"]:
-            checks.append(("gpu", f"GPU a {s['gpu_temp']:.0f}°C", f"Soglia {a['gpu_temp']}°C superata."))
+            checks.append(("gpu", T("GPU a {t:.0f}°C", t=s["gpu_temp"]), T("Soglia {v}°C superata.", v=a["gpu_temp"])))
         if s.get("fan") is not None and s["fan"] < a["fan_min_rpm"]:
-            checks.append(("fan", f"Ventola a {s['fan']} rpm", "La ventola sembra ferma o lenta!"))
+            checks.append(("fan", T("Ventola a {v} rpm", v=s["fan"]), T("La ventola sembra ferma o lenta!")))
         if s.get("ram") and s["ram"][1] and s["ram"][0] / s["ram"][1] > 0.95:
-            checks.append(("ram", "RAM quasi piena", f"{s['ram'][0]:.1f}/{s['ram'][1]:.1f} GiB usati."))
+            checks.append(("ram", T("RAM quasi piena"), T("{u:.1f}/{t:.1f} GiB usati.", u=s["ram"][0], t=s["ram"][1])))
         now = time.time()
         for key, title, body in checks:
             self.alerts.append({"key": key, "title": title})

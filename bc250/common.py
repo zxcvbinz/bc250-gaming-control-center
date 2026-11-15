@@ -20,6 +20,7 @@ LAYER_MANIFEST = os.path.join(HOME, ".local/share/vulkan/implicit_layer.d/bc250_
 MANGOHUD_FLAG = os.path.join(CONF_DIR, "mangohud-disabled")
 
 DEFAULTS = {
+    "language": "it",             # lingua dell'interfaccia (vedi i18n.LANGS)
     "engine": {
         "enabled": True,          # motore FPS nei giochi Vulkan/Proton
         "fps_limit": 60,          # limite globale
@@ -67,21 +68,28 @@ DEFAULTS = {
     ],
 }
 
+def _T(text, **kw):
+    """Traduzione al momento della visualizzazione (import qui: i18n importa common)."""
+    from .i18n import T
+    return T(text, **kw)
+
+
 # campi dei profili: (chiave, etichetta, valori, formato) — usati da pannello in gioco e GUI
+# etichette e nomi restano in italiano come dati: si traducono con T() dove si mostrano
 STYLE_NAMES = {None: "come globale", "bubble": "cerchio", "ring": "anello", "compact": "barra", "full": "completo"}
 POS_NAMES = {None: "come globale", "top-left": "alto sinistra", "top-center": "alto centro",
              "top-right": "alto destra", "bottom-left": "basso sinistra", "bottom-center": "basso centro", "bottom-right": "basso destra"}
 PROFILE_FIELDS = [
     ("fps_limit", "Limite FPS", [None, 0, 30, 40, 45, 50, 60, 72, 75, 82, 90, 100, 110, 120, 144, 165],
-     lambda v, g: "globale" if v is None else ("nessuno" if v == 0 else f"{v} FPS")),
+     lambda v, g: _T("globale") if v is None else (_T("nessuno") if v == 0 else _T("{v} FPS", v=v))),
     ("gpu_max", "Clock GPU max", [None] + list(range(1000, 2001, 50)),
-     lambda v, g: "normale" if v is None else f"{v} MHz"),
-    ("vrr", "VRR", [False, True], lambda v, g: "automatico" if v else "spento"),
+     lambda v, g: _T("normale") if v is None else f"{v} MHz"),
+    ("vrr", "VRR", [False, True], lambda v, g: _T("automatico") if v else _T("spento")),
     ("heat_guard", "Protezione calore", [None, 80, 82, 85, 88, 90],
-     lambda v, g: "spenta" if v is None else f"CPU {v}°C"),
-    ("hud", "Overlay", [True, False], lambda v, g: "visibile" if v in (True, None) else "nascosto"),
-    ("hud_position", "Posizione overlay", list(POS_NAMES), lambda v, g: POS_NAMES.get(v, str(v))),
-    ("hud_style", "Stile overlay", list(STYLE_NAMES), lambda v, g: STYLE_NAMES.get(v, str(v))),
+     lambda v, g: _T("spenta") if v is None else f"CPU {v}°C"),
+    ("hud", "Overlay", [True, False], lambda v, g: _T("visibile") if v in (True, None) else _T("nascosto")),
+    ("hud_position", "Posizione overlay", list(POS_NAMES), lambda v, g: _T(POS_NAMES.get(v, str(v)))),
+    ("hud_style", "Stile overlay", list(STYLE_NAMES), lambda v, g: _T(STYLE_NAMES.get(v, str(v)))),
 ]
 FIELD_DEFAULT = {"fps_limit": None, "gpu_max": None, "vrr": False, "heat_guard": None, "hud": True,
                  "hud_position": None, "hud_style": None}
