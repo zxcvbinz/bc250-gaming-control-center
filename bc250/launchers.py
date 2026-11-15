@@ -138,7 +138,7 @@ def steam_configs(root):
             if not p.split("/userdata/")[1].startswith("0/")]
 
 
-def steam_edit(enable, drop_mangohud=False, only_new=False):
+def steam_edit(enable, drop_mangohud=False, only_new=False, only=None):
     """Modifica localconfig.vdf (Steam deve essere chiuso). Ritorna {appid: (prima, dopo)}."""
     root = steam_root()
     if not root:
@@ -151,6 +151,8 @@ def steam_edit(enable, drop_mangohud=False, only_new=False):
         apps = _ci(data, "UserLocalConfigStore", "Software", "Valve", "Steam", "apps")
         mine = {}
         for appid in games:
+            if only is not None and appid not in only:
+                continue
             a = apps.get(appid)
             if a is None:
                 if not enable:
@@ -204,10 +206,15 @@ def with_steam_closed(fn, restart=True, timeout=40):
 
 
 # ---------------------------------------------------------------- Lutris
-def lutris_edit(enable):
+LUTRIS_GAMES = "~/.local/share/lutris/games"
+
+
+def lutris_edit(enable, only=None):
     import yaml
     changed = {}
-    for p in glob.glob(os.path.expanduser("~/.local/share/lutris/games/*.yml")):
+    for p in glob.glob(os.path.expanduser(LUTRIS_GAMES + "/*.yml")):
+        if only is not None and os.path.basename(p)[:-4] not in only:
+            continue
         try:
             data = yaml.safe_load(open(p)) or {}
         except (OSError, yaml.YAMLError):
@@ -236,7 +243,7 @@ def lutris_edit(enable):
 
 
 # ---------------------------------------------------------------- Heroic
-def heroic_edit(enable):
+def heroic_edit(enable, only=None):
     changed = {}
     for p in glob.glob(os.path.expanduser("~/.config/heroic/GamesConfig/*.json")):
         try:
@@ -244,7 +251,7 @@ def heroic_edit(enable):
         except (OSError, ValueError):
             continue
         for gid, gc in data.items():
-            if not isinstance(gc, dict):
+            if not isinstance(gc, dict) or (only is not None and gid not in only):
                 continue
             wr = gc.get("wrapperOptions") or []
             has = any(w.get("exe") == TOKEN for w in wr)
@@ -295,3 +302,150 @@ def launched_with_run(pid):
         return b"BC250_RUN=1" in open(f"/proc/{pid}/environ", "rb").read().split(b"\0")
     except OSError:
         return None
+
+
+# ---------------------------------------------------------------- giochi nuovi: rileva e chiedi
+KNOWN_PATH = os.path.join(common.DATA_DIR, "known_games.json")
+# launcher.mode: ask = chiedi per ogni gioco nuovo, auto = collega da solo, off = non fare niente
+
+
+def catalog():
+    """Tutti i giochi installati: {"steam:275850": {"name", "store", "linked"}}."""
+    out = {}
+    root = steam_root()
+    if root:
+        games = installed_games(root)
+        opts = {}
+        for cfgp in steam_configs(root)[:1]:
+            try:
+                apps = _ci(vdf_loads(open(cfgp, errors="replace").read()),
+                           "UserLocalConfigStore", "Software", "Valve", "Steam", "apps")
+                opts = {k: v.get("LaunchOptions", "") for k, v in apps.items() if isinstance(v, dict)}
+            except OSError:
+                pass
+        for appid, name in games.items():
+            out[f"steam:{appid}"] = {"name": name, "store": "Steam", "linked": TOKEN in opts.get(appid, "")}
+    names = {}
+    try:
+        import sqlite3
+        db = sqlite3.connect(os.path.expanduser("~/.local/share/lutris/pga.db"))
+        names = {r[1]: r[0] for r in db.execute("SELECT name, configpath FROM games")}
+    except Exception:
+        pass
+    try:
+        import yaml
+        for p in glob.glob(os.path.expanduser(LUTRIS_GAMES + "/*.yml")):
+            cid = os.path.basename(p)[:-4]
+            try:
+                data = yaml.safe_load(open(p)) or {}
+            except Exception:
+                continue
+            g = data.get("game") or {}
+            if g.get("appid") and not g.get("exe"):
+                continue   # gioco Steam
+            pc = str((data.get("system") or {}).get("prefix_command") or "")
+            pretty = re.sub(r"-\d+$", "", cid).replace("-", " ").title()
+            out[f"lutris:{cid}"] = {"name": names.get(cid) or pretty, "store": "Lutris", "linked": TOKEN in pc.split()}
+    except ImportError:
+        pass
+    for p in glob.glob(os.path.expanduser("~/.config/heroic/GamesConfig/*.json")):
+        try:
+            data = json.load(open(p))
+        except (OSError, ValueError):
+            continue
+        for gid, gc in data.items():
+            if isinstance(gc, dict):
+                out[f"heroic:{gid}"] = {"name": gc.get("title") or gid, "store": "Heroic",
+                                        "linked": any(w.get("exe") == TOKEN for w in gc.get("wrapperOptions") or [])}
+    return out
+
+
+def load_known():
+    try:
+        return json.load(open(KNOWN_PATH))
+    except (OSError, ValueError):
+        return {}
+
+
+def save_known(known):
+    os.makedirs(common.DATA_DIR, exist_ok=True)
+    tmp = KNOWN_PATH + ".tmp"
+    json.dump(known, open(tmp, "w"), indent=1, ensure_ascii=False)
+    os.replace(tmp, KNOWN_PATH)
+
+
+def pending():
+    return {k: v for k, v in load_known().items() if v.get("status") == "pending"}
+
+
+def _split(keys):
+    by = {"steam": set(), "lutris": set(), "heroic": set()}
+    for k in keys:
+        store, _, gid = k.partition(":")
+        if store in by:
+            by[store].add(gid)
+    return by
+
+
+def link(keys, enable=True, restart_steam=False):
+    """Collega (o scollega) i giochi indicati. I giochi Steam con Steam aperto restano in coda
+    («queued») e vengono collegati alla prossima chiusura di Steam, a meno di restart_steam."""
+    by = _split(keys)
+    known = load_known()
+    drop_mh = os.path.exists(common.MANGOHUD_FLAG)
+    done, queued = [], []
+    if by["lutris"]:
+        lutris_edit(enable, by["lutris"])
+        done += [f"lutris:{g}" for g in by["lutris"]]
+    if by["heroic"]:
+        heroic_edit(enable, by["heroic"])
+        done += [f"heroic:{g}" for g in by["heroic"]]
+    if by["steam"]:
+        if steam_pids() and not restart_steam:
+            queued += [f"steam:{g}" for g in by["steam"]]
+        else:
+            with_steam_closed(lambda: steam_edit(enable, drop_mh, only=by["steam"]), restart=True)
+            done += [f"steam:{g}" for g in by["steam"]]
+    for k in done:
+        known.setdefault(k, {})["status"] = "linked" if enable else "ignored"
+    for k in queued:
+        known.setdefault(k, {})["status"] = "queued" if enable else "ignored"
+    save_known(known)
+    return done, queued
+
+
+def ignore(keys):
+    known = load_known()
+    for k in keys:
+        known.setdefault(k, {})["status"] = "ignored"
+    save_known(known)
+
+
+def scan(mode="ask"):
+    """Dal servizio, ogni minuto: trova i giochi nuovi. Ritorna la lista dei nuovi da chiedere.
+    Al primo giro tutti i giochi già installati sono «conosciuti» (niente domande per quelli vecchi)."""
+    known = load_known()
+    first = not known
+    cat = catalog()
+    new = []
+    for k, g in cat.items():
+        if k in known:
+            known[k]["name"] = g["name"]
+            if g["linked"] and known[k].get("status") in ("pending", "queued"):
+                known[k]["status"] = "linked"
+            continue
+        status = "linked" if g["linked"] else ("ignored" if first or mode == "off" else "pending")
+        known[k] = {"name": g["name"], "store": g["store"], "status": status, "seen": time.time()}
+        if status == "pending":
+            new.append(k)
+    for k in [k for k in known if k not in cat]:   # disinstallati
+        del known[k]
+    save_known(known)
+    if mode == "auto" and new:
+        link(new)
+        new = []
+    # Steam in coda: si collegano appena Steam è chiuso
+    q = [k for k, v in known.items() if v.get("status") == "queued"]
+    if q and not steam_pids():
+        link(q)
+    return new

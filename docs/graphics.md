@@ -118,8 +118,18 @@ in `~/.local/share/bc250/run.log`. A profile with `opengl: true` also loads the 
 - **Existing options are kept.** `bc250-run` goes right before `%command%`, after any variables
   (`PROTON_USE_WINED3D=1 bc250-run %command% -skip_intro`). If MangoHud is turned off in the app, a plain
   `mangohud %command%` becomes `bc250-run %command%`.
-- **New games:** every minute, while Steam is closed, the daemon adds `bc250-run` to newly installed games
-  that have no options of their own. Lutris and Heroic are kept up to date at any time.
+- **New games:** every couple of minutes the daemon looks for newly installed games (Steam, Lutris, Heroic).
+  What happens depends on **Games & FPS → Games you install later** (`launcher.mode`):
+  - *Ask me* (`ask`, default): a desktop notification "New game: …" with **Link / Ignore / Open** buttons,
+    plus a banner at the top of the Control Center until you answer;
+  - *Link automatically* (`auto`): linked without asking;
+  - *Do nothing* (`off`).
+  Linking a Steam game while Steam is open is queued and done as soon as Steam closes, unless you choose to
+  restart Steam right away. Games already installed when the feature first runs are never asked about.
+- **Your games** (Games & FPS) lists every installed game with a tick for *linked*. Untick or tick one
+  game at a time, or use *Link all* / *Unlink all*.
+- **In game**, the Shift+F2 panel shows whether the running game is *linked ✓* (started through
+  `bc250-run`, with the active upscaling) or *not linked*.
 - **Lutris** entries that are Steam games are skipped: they already go through Steam's launch options.
 - If a profile asks for upscaling but the game did not start through `bc250-run`, a toast tells you.
 - Every edited file is backed up first in `~/.local/share/bc250/backups/launchers/`. Turning the option off

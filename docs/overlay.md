@@ -92,7 +92,8 @@ to a full benchmark panel. The preview at the top of the page updates live.
 
 A 760×580 panel in the middle of the screen with:
 
-- game name, API (Vulkan/OpenGL), profile, Steam app id, core/thread count;
+- game name, API (Vulkan/OpenGL), profile, Steam app id, whether it is *linked* (started through
+  `bc250-run`, with the active FSR upscaling), core/thread count;
 - FPS limit badge (active, disabled, heat guard engaged);
 - current FPS, 60 s average, 1% low, frametime graph of the last 120 frames;
 - CPU, GPU, GPU clock and power graphs (last 60 s) with min/max;

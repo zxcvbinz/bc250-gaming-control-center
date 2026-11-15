@@ -64,8 +64,9 @@ DEFAULTS = {
     # upscale_*: usati da bc250-run per i profili con upscaling (gamescope)
     "display": {"vrr_games_only": True, "vrr_off_delay_s": 8, "upscale_filter": "fsr", "upscale_sharpness": 3},
     "gpu_default": {"min": 1000, "max": 1750},
-    # auto: bc250-run viene messo da solo nelle opzioni di avvio dei giochi nuovi (Steam chiuso, Lutris, Heroic)
-    "launcher": {"auto": False},
+    # mode per i giochi installati dopo: ask = notifica e chiedi se collegarli (bc250-run nelle opzioni
+    # di avvio), auto = collega da solo, off = niente
+    "launcher": {"auto": False, "mode": "ask"},
     # match: testo contenuto nel nome del processo, oppure "appid:<SteamAppId>"
     "profiles": [
         {"name": "Hytale", "match": "HytaleClient", "fps_limit": 90, "gpu_max": 1750},

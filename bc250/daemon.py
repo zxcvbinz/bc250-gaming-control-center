@@ -202,6 +202,8 @@ class Daemon:
         self.gfx_data = {}
         self.gfx_mtime = 0
         self.gfx_pending = None     # (gioco, pid) da sistemare quando il processo esce
+        self.scan_lock = threading.Lock()
+        self.via_run = {}           # pid -> partito da bc250-run?
         self.apply_control()
         self.hist.prune(self.cfg["history"]["keep_days"])
         n = self.hist.merge_split(self.gap())
@@ -383,11 +385,46 @@ class Daemon:
         if want:
             apply_graphics(self.hist.db, name, want, self.hist.session)
 
-    def launcher_maintain(self):
+    def launcher_scan(self):
+        """Giochi installati di recente: chiedi se collegarli (notifica con pulsanti)."""
+        if not self.scan_lock.acquire(blocking=False):
+            return   # c'è già una notifica in attesa di risposta
         try:
-            launchers.maintain()
+            self._launcher_scan()
+        finally:
+            self.scan_lock.release()
+
+    def _launcher_scan(self):
+        try:
+            mode = self.cfg.get("launcher", {}).get("mode", "ask")
+            new = launchers.scan(mode)
         except Exception as ex:
             print("launcher:", repr(ex), file=sys.stderr, flush=True)
+            return
+        if not new or mode != "ask":
+            return
+        known = launchers.load_known()
+        names = [known[k]["name"] for k in new]
+        title = T("Nuovo gioco: {g}", g=names[0]) if len(names) == 1 else T("{n} nuovi giochi", n=len(names))
+        body = T("Collegarlo al Control Center? Potrai usare l'upscaling FSR e le impostazioni dal profilo.") \
+            if len(names) == 1 else ", ".join(names[:6])
+        try:
+            r = subprocess.run(["notify-send", "-a", "BC-250", "-i", "applications-games", "-t", "0",
+                                "-A", "link=" + T("Collega"), "-A", "ignore=" + T("Ignora"),
+                                "-A", "open=" + T("Apri"), title, body],
+                               capture_output=True, text=True, timeout=6 * 3600)
+        except (OSError, subprocess.TimeoutExpired):
+            return
+        act = r.stdout.strip()
+        if act == "link":
+            done, queued = launchers.link(new)
+            if queued:
+                notify("BC-250", T("Verrà collegato appena chiudi Steam."))
+        elif act == "ignore":
+            launchers.ignore(new)
+        elif act == "open":
+            subprocess.Popen([os.path.expanduser("~/.local/bin/bc250-control"), "--page", "1"],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
     def track_session(self, game):
         if game:
@@ -473,8 +510,8 @@ class Daemon:
             self.on_game_change(game)
             self.game_key = key
         self.track_session(game)
-        if self.n % 120 == 0 and self.cfg.get("launcher", {}).get("auto"):
-            threading.Thread(target=self.launcher_maintain, daemon=True).start()
+        if self.n % 120 == 10:
+            threading.Thread(target=self.launcher_scan, daemon=True).start()
         if self.n % 10 == 0:
             try:
                 self.gfx_check() if game else self.gfx_after_exit()
@@ -491,7 +528,10 @@ class Daemon:
 
         e = self.cfg["engine"]
         if game:
-            game = dict(game, profile=self.profile["name"] if self.profile else None,
+            if game["pid"] not in self.via_run:
+                self.via_run = {game["pid"]: launchers.launched_with_run(game["pid"])}
+            game = dict(game, via_run=self.via_run[game["pid"]],
+                        profile=self.profile["name"] if self.profile else None,
                         profile_data=self.profile, guard_cut=self.guard_cut,
                         base_limit=self.base_limit(), vrr=bool(self.vrr_on))
         state = {

@@ -591,14 +591,35 @@ class GamesPage:
         up.lay.addWidget(label(T("Scegli l'upscaling nel profilo del gioco (Profili o Shift+F2): 77% ultra qualità, "
                                  "67% qualità, 59% bilanciato, 50% prestazioni. Vale dal prossimo avvio."),
                                8.5, P["DIM"], wrap=True))
-        self.auto_run = QCheckBox()
-        self.auto_run.setChecked(bool(common.load_config().get("launcher", {}).get("auto")))
-        self.auto_run.toggled.connect(self.toggle_auto_run)
-        up.lay.addWidget(row(T("Automatico in tutti i giochi"), self.auto_run,
-                             T("Mette bc250-run nelle opzioni di avvio di tutti i giochi Steam, Lutris e Heroic, "
-                               "anche quelli che installerai. Le opzioni che hai già restano; mangohud viene tolto "
-                               "se hai disattivato MangoHud. Steam si chiude e riapre da solo per un attimo.")))
+        self.mode = QComboBox()
+        for k, t in (("ask", "Chiedimi se collegarli"), ("auto", "Collegali da soli"), ("off", "Non fare niente")):
+            self.mode.addItem(T(t), k)
+        self.mode.setCurrentIndex(max(0, self.mode.findData(common.load_config().get("launcher", {}).get("mode", "ask"))))
+        self.mode.activated.connect(lambda *_: common.update_config(
+            lambda c: c.setdefault("launcher", {}).update(mode=self.mode.currentData())))
+        up.lay.addWidget(row(T("Giochi che installerai"), self.mode,
+                             T("Il Control Center li rileva da solo (Steam, Lutris, Heroic) e ti manda una notifica.")))
         lay.addWidget(up)
+
+        gc = Card(T("I tuoi giochi"), T("Spunta = collegato: parte con bc250-run e può usare l'upscaling FSR del profilo. "
+                                        "Le opzioni di avvio che hai già restano."))
+        self.glist = QListWidget()
+        self.glist.setObjectName("items")
+        self.glist.setFixedHeight(300)
+        self.glist.itemChanged.connect(self.game_toggled)
+        gc.lay.addWidget(self.glist)
+        btns = QHBoxLayout()
+        for text, fn in ((T("Collega tutti"), lambda: self.link_all(True)),
+                         (T("Scollega tutti"), lambda: self.link_all(False)),
+                         (T("Aggiorna"), self.load_games)):
+            b = QPushButton(text)
+            b.clicked.connect(fn)
+            btns.addWidget(b)
+        btns.addStretch()
+        gc.lay.addLayout(btns)
+        lay.addWidget(gc)
+        self.launch_result = None
+        self.load_games()
 
         mh = Card("MangoHud")
         self.mh = label("", 9.5, P["MUTED"], wrap=True)
@@ -630,35 +651,89 @@ class GamesPage:
         write_control(e["fps_limit"], e["limit_enabled"], e["enabled"])
         self.win.toast(T("Limite FPS: {v}", v=lim) if lim and en else T("Limite FPS: disattivato"))
 
-    def toggle_auto_run(self, on):
-        if on:
-            msg = T("Steam verrà chiuso e riaperto per scrivere le opzioni di avvio. Se stai giocando, chiudi "
-                    "prima il gioco. Continuo?")
+    def load_games(self):
+        from . import launchers
+        try:
+            launchers.scan(common.load_config().get("launcher", {}).get("mode", "ask"))
+        except Exception as e:
+            print("scan:", e, file=sys.stderr)
+        known = launchers.load_known()
+        self.glist.blockSignals(True)
+        self.glist.clear()
+        labels = {"linked": "", "pending": T("nuovo"), "queued": T("alla chiusura di Steam"), "ignored": ""}
+        for k, g in sorted(known.items(), key=lambda kv: (kv[1].get("status") != "pending", kv[1].get("name", "").lower())):
+            st = g.get("status")
+            extra = labels.get(st, "")
+            it = QListWidgetItem(f"{g.get('name', k)}   ·   {g.get('store', '')}" + (f"   ·   {extra}" if extra else ""))
+            it.setData(Qt.ItemDataRole.UserRole, k)
+            it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            it.setCheckState(Qt.CheckState.Checked if st in ("linked", "queued") else Qt.CheckState.Unchecked)
+            if st == "pending":
+                it.setForeground(QColor(P["WARN"]))
+            self.glist.addItem(it)
+        self.glist.blockSignals(False)
+
+    def game_toggled(self, it):
+        self.do_link([it.data(Qt.ItemDataRole.UserRole)], it.checkState() == Qt.CheckState.Checked)
+
+    def do_link(self, keys, on):
+        """Collega/scollega; per Steam aperto chiede se riavviarlo ora o farlo alla chiusura."""
+        from . import launchers
+        restart = False
+        if any(k.startswith("steam:") for k in keys) and launchers.steam_pids():
+            r = QMessageBox.question(self.w, "BC-250", T("Steam è aperto e scrive le opzioni di avvio quando si chiude. "
+                                     "Lo riavvio adesso (qualche secondo)? Con «No» lo faccio alla prossima chiusura di Steam."))
+            restart = r == QMessageBox.StandardButton.Yes
+
+        steam_open = bool(launchers.steam_pids())
+        if not on and steam_open and not restart:
+            # scollegare un gioco Steam si può solo a Steam chiuso: per ora restano collegati
+            keys = [k for k in keys if not k.startswith("steam:")]
+            self.win.toast(T("Per scollegare i giochi Steam serve chiudere Steam: riprova e scegli «Sì»."))
+            if not keys:
+                self.load_games()
+                return
+
+        def work():
+            try:
+                done, queued = launchers.link(keys, on, restart_steam=restart)
+                self.launch_result = (T("Collegati: {n}.", n=len(done)) if on else T("Scollegati: {n}.", n=len(done))) + \
+                    (" " + T("{n} di Steam alla prossima chiusura di Steam.", n=len(queued)) if queued else "")
+            except Exception as e:
+                self.launch_result = str(e)
+        self.launch_result = None
+        threading.Thread(target=work, daemon=True).start()
+        self.wait_result()
+
+    def wait_result(self):
+        if self.launch_result is None:
+            QTimer.singleShot(400, self.wait_result)
         else:
-            msg = T("Tolgo bc250-run dalle opzioni di avvio di tutti i giochi (Steam si chiude e riapre). Continuo?")
+            self.win.toast(self.launch_result)
+            self.load_games()
+            self.win.check_new_games(force=True)
+
+    def link_all(self, on):
+        from . import launchers
+        msg = T("Steam verrà chiuso e riaperto per scrivere le opzioni di avvio. Se stai giocando, chiudi "
+                "prima il gioco. Continuo?") if on else \
+            T("Tolgo bc250-run dalle opzioni di avvio di tutti i giochi (Steam si chiude e riapre). Continuo?")
         if QMessageBox.question(self.w, "BC-250", msg) != QMessageBox.StandardButton.Yes:
-            self.auto_run.blockSignals(True)
-            self.auto_run.setChecked(not on)
-            self.auto_run.blockSignals(False)
             return
-        common.update_config(lambda c: c.setdefault("launcher", {}).update(auto=on))
         self.win.toast(T("Aggiorno le opzioni di avvio…"))
 
         def work():
-            from . import launchers
             res = launchers.apply_all(on)
+            known = launchers.load_known()
+            for k in known:
+                known[k]["status"] = "linked" if on else "ignored"
+            launchers.save_known(known)
             n = len(res["steam"]) + len(res["lutris"]) + len(res["heroic"])
             self.launch_result = T("Opzioni di avvio aggiornate: {n} giochi.", n=n) + \
                 (" " + "; ".join(res["errors"]) if res["errors"] else "")
         self.launch_result = None
         threading.Thread(target=work, daemon=True).start()
-
-        def poll():
-            if self.launch_result is None:
-                QTimer.singleShot(500, poll)
-            else:
-                self.win.toast(self.launch_result)
-        QTimer.singleShot(500, poll)
+        self.wait_result()
 
     def toggle_mangohud(self, on):
         if on:
@@ -1559,6 +1634,22 @@ class Main(QWidget):
         right = QVBoxLayout(content)
         right.setContentsMargins(0, 0, 0, 0)
         right.setSpacing(0)
+        self.banner = QFrame()
+        self.banner.setObjectName("card")
+        bl = QHBoxLayout(self.banner)
+        bl.setContentsMargins(16, 8, 12, 8)
+        self.banner_l = label("", 10)
+        self.banner_l.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        bl.addWidget(self.banner_l, 1)
+        for text, fn in ((T("Collega"), lambda: self.banner_act("link")), (T("Ignora"), lambda: self.banner_act("ignore")),
+                         (T("Vedi"), lambda: self.nav.setCurrentRow(1))):
+            b = QPushButton(text)
+            if text == T("Collega"):
+                b.setObjectName("primary")
+            b.clicked.connect(fn)
+            bl.addWidget(b)
+        self.banner.hide()
+        right.addWidget(self.banner)
         self.stack = QStackedWidget()
         right.addWidget(self.stack, 1)
         self.toast_l = label("", 9.5, P["ACCENT"])
@@ -1597,6 +1688,35 @@ class Main(QWidget):
         self.build(cur)
         self.tick()
 
+    def check_new_games(self, force=False):
+        """Avviso in cima quando il servizio ha trovato giochi nuovi da collegare."""
+        from . import launchers
+        try:
+            m = os.stat(launchers.KNOWN_PATH).st_mtime
+        except OSError:
+            m = 0
+        if not force and m == getattr(self, "_known_m", None):
+            return
+        self._known_m = m
+        pend = launchers.pending()
+        self.pending_keys = list(pend)
+        if pend:
+            names = ", ".join(v.get("name", k) for k, v in list(pend.items())[:4]) + ("…" if len(pend) > 4 else "")
+            self.banner_l.setText("🎮 " + T("Nuovi giochi rilevati: {g}. Collegarli al Control Center?", g=names))
+        self.banner.setVisible(bool(pend))
+
+    def banner_act(self, act):
+        from . import launchers
+        keys = getattr(self, "pending_keys", [])
+        if not keys:
+            return
+        if act == "ignore":
+            launchers.ignore(keys)
+            self.check_new_games(force=True)
+            return
+        games = self.pages[1]
+        games.do_link(keys, True)
+
     def toast(self, text):
         self.toast_l.setText(text)
         self.toast_timer.start(4000)
@@ -1609,6 +1729,7 @@ class Main(QWidget):
             (f"<span style='color:{P['GOOD']}'>●</span> " + T("servizio attivo") if fresh else
              f"<span style='color:{P['BAD']}'>●</span> " + T("servizio fermo — vedi Salute"))
             + (f"<br>{g['name']} · {g['fps']:.0f} FPS" if g else ""))
+        self.check_new_games()
         cur = self.stack.currentIndex()
         try:
             self.pages[cur].refresh(st)

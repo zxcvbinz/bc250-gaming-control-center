@@ -269,6 +269,12 @@ class Panel(LayerWindow):
             sub.append(T("profilo: {p}", p=g["profile"]) if g.get("profile") else T("nessun profilo"))
             if g.get("appid"):
                 sub.append(f"Steam {g['appid']}")
+            # partito dal lanciatore bc250-run? (serve per l'upscaling FSR dal profilo)
+            up = (g.get("profile_data") or {}).get("upscale")
+            if g.get("via_run") is True:
+                sub.append(T("collegato ✓") + (f" · {T(common.UPSCALE_NAMES.get(up, ''))}" if up else ""))
+            elif g.get("via_run") is False:
+                sub.append(T("non collegato") + (" · " + T("upscaling non attivo") if up else ""))
         sub.append(f"BC-250 · {s.get('cores', '?')} core / {s.get('threads', '?')} thread")
         p.drawText(QRectF(20, 38, 520, 16), Qt.AlignmentFlag.AlignLeft, "  ·  ".join(sub))
 

@@ -63,7 +63,8 @@ babysitting. This app keeps an eye on it while you play and lets you tune each g
 - **FSR upscaling for any game, plug & play**: one switch puts the `bc250-run` launcher in every Steam, Lutris
   and Heroic game (keeping your options), then the game profile can run
   it at 77/67/59/50 % resolution inside gamescope, upscaled with AMD FSR 1. More FPS and less heat on the
-  BC-250's single fan. → [Upscaling](docs/graphics.md#upscaling-for-any-game-bc250-run)
+  BC-250's single fan. Games you install later are detected and you get a notification asking whether to
+  link them. → [Upscaling](docs/graphics.md#upscaling-for-any-game-bc250-run)
 - **Real GPU clock for every tool on 8-core boards**: after the 8-core unlock the SMU metrics table
   loses the GPU clock, so MangoHud, the Steam overlay and LACT show 3–100 MHz. `bc250-metricsfix`
   (a small root service) writes the real clock, read by
