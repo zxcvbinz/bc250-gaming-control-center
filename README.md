@@ -127,11 +127,15 @@ D-Bus enabled.
 ```sh
 git clone https://github.com/zxcvbinz/bc250-gaming-control-center.git
 cd bc250-gaming-control-center
-python3 -m bc250.install            # build the engine, install services, shortcuts and launchers
+python3 -m bc250.install            # one command: everything below happens automatically
 python3 -m bc250.install --remove   # uninstall everything
 ```
 
-- Native OpenGL Steam games: set the launch options to `bc250-gl %command%`.
+That single command builds and enables the FPS engine (loaded automatically into every Vulkan/Proton game),
+starts the services, registers the shortcuts, puts the `bc250-run` launcher into every Steam, Lutris and
+Heroic game (Steam is closed and reopened for a few seconds; your launch options are kept; use
+`--no-launcher` to skip) and, with `sudo`, installs the 8-core GPU clock fix. Nothing to configure per game.
+
 - Turn the engine off for one game: `DISABLE_BC250_LAYER=1 %command%`.
 
 ## Shortcuts

@@ -221,9 +221,12 @@ WantedBy={GOV_UNIT}
 
 
 def sudo(cmd, input=None):
-    r = subprocess.run(["sudo", "-n"] + cmd, input=input, capture_output=True, text=True)
+    # da terminale sudo può chiedere la password; altrimenti (GUI, servizi) mai
+    flags = [] if sys.stdin.isatty() else ["-n"]
+    r = subprocess.run(["sudo"] + flags + cmd, input=input, text=True,
+                       stdout=subprocess.PIPE, stderr=None if not flags else subprocess.PIPE)
     if r.returncode != 0:
-        raise RuntimeError(r.stderr.strip() or f"sudo {' '.join(cmd)} fallito")
+        raise RuntimeError((r.stderr or "").strip() or f"sudo {' '.join(cmd)} fallito")
     return r
 
 
@@ -248,6 +251,19 @@ def remove_metrics_fix():
         pass
 
 
+def install_launchers():
+    """bc250-run in tutti i giochi (Steam chiuso e riaperto se aperto, Lutris, Heroic)."""
+    from . import launchers
+    common.update_config(lambda c: c.setdefault("launcher", {}).update(auto=True))
+    if launchers.steam_pids():
+        print("    Steam verrà chiuso e riaperto per scrivere le opzioni di avvio…")
+    res = launchers.apply_all(True)
+    n = sum(len(res[k]) for k in ("steam", "lutris", "heroic"))
+    print(f"    {len(res['steam'])} giochi Steam, {len(res['lutris'])} Lutris, {len(res['heroic'])} Heroic"
+          + (" · " + "; ".join(res["errors"]) if res["errors"] else ""))
+    return n > 0 or not res["errors"]
+
+
 def install():
     steps = [
         ("Compilo il motore FPS", build_layer),
@@ -261,6 +277,8 @@ def install():
         ("Server MCP per Claude Code", register_mcp),
         ("Clock GPU reale per MangoHud/Steam/LACT (8 core, sudo)", install_metrics_fix),
     ]
+    if "--no-launcher" not in sys.argv:
+        steps.append(("Lanciatore bc250-run in tutti i giochi (upscaling FSR dai profili)", install_launchers))
     if not os.path.exists(common.CONF_PATH):
         common.save_config(common.load_config())
     for title, fn in steps:
@@ -291,6 +309,11 @@ def remove():
     for a in FLATPAK_GL_APPS:
         flatpak_gl(a, False)
     remove_metrics_fix()
+    try:
+        from . import launchers
+        launchers.apply_all(False)
+    except Exception as e:
+        print(f"  ✗ lanciatore: {e}")
     print("Rimosso. MangoHud tornerà attivo dal prossimo accesso.")
 
 
