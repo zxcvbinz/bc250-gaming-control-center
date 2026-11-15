@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """bc250-mcp: server MCP (stdio) per Claude Code.
 
 Permette a Claude di leggere i dati live e lo storico delle partite, segnare i
@@ -9,7 +11,7 @@ import sqlite3
 import sys
 import time
 
-from . import common, gamecfg, health, i18n
+from . import __version__, common, gamecfg, health, i18n
 from .engine import write_control
 from .sensors import governor_range, governor_set
 
@@ -63,7 +65,7 @@ def downsample(rows, points=60):
     out = []
     for i in range(0, len(rows), step):
         chunk = rows[i:i + step]
-        def avg(k):
+        def avg(k, chunk=chunk):
             v = [r[k] for r in chunk if r[k] is not None]
             return r1(sum(v) / len(v)) if v else None
         out.append({"t": r1(chunk[0]["t"] - rows[0]["t"], 0), "fps": avg("fps"), "low1": avg("low1"),
@@ -362,13 +364,13 @@ def handle(msg):
     if method == "initialize":
         return {"protocolVersion": msg.get("params", {}).get("protocolVersion", PROTOCOL),
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "bc250", "version": "1.0"}}
+                "serverInfo": {"name": "bc250", "version": __version__}}
     if method == "ping":
         return {}
     if method == "tools/list":
         tools = []
         for name, spec in TOOLS.items():
-            fn, desc, props = spec[0], spec[1], spec[2]
+            desc, props = spec[1], spec[2]
             req = spec[3] if len(spec) > 3 else []
             tools.append({"name": name, "description": desc,
                           "inputSchema": {"type": "object", "properties": props, "required": req}})

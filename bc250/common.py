@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """Percorsi, configurazione e stato condivisi tra servizio, overlay, GUI e MCP."""
 import copy
 import json
@@ -68,9 +70,7 @@ DEFAULTS = {
     # di avvio), auto = collega da solo, off = niente
     "launcher": {"auto": False, "mode": "ask"},
     # match: testo contenuto nel nome del processo, oppure "appid:<SteamAppId>"
-    "profiles": [
-        {"name": "Hytale", "match": "HytaleClient", "fps_limit": 90, "gpu_max": 1750},
-    ],
+    "profiles": [],
 }
 
 def _T(text, **kw):

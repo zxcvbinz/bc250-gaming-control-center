@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """bc250ctl: comandi rapidi (usati dalle scorciatoie da tastiera).
 
   bc250ctl toggle-limit     Shift+F1  limite FPS on/off

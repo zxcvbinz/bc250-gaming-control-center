@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 zxcvbinz and contributors */
 /* BC-250 frame engine: shared memory + frame limiter (Vulkan layer and GL preload).
  *
  * Every presenting process creates  <dir>/fps-<pid>-<rand>.bin  (struct bc_frame)

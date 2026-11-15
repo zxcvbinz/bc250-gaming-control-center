@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """bc250d: servizio in background.
 
 Ogni 0.5 s: legge sensori e giochi attivi, scrive lo stato per overlay/GUI/MCP.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """bc250-overlay: HUD minimal + pannello dettagli (Shift+F2) + avvisi a schermo.
 
 Finestre Wayland layer-shell (livello Overlay): restano sopra anche ai giochi a
@@ -14,7 +16,7 @@ os.environ["QT_WAYLAND_SHELL_INTEGRATION"] = "layer-shell"
 
 from PyQt6 import sip  # noqa: E402
 from PyQt6.QtCore import QPointF, QRectF, QSocketNotifier, Qt, QTimer  # noqa: E402
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen  # noqa: E402
+from PyQt6.QtGui import QFontMetrics, QPainter, QPen  # noqa: E402
 from PyQt6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 from . import common, i18n  # noqa: E402
@@ -119,7 +121,7 @@ class Hud(LayerWindow):
 
 
 # ---------------------------------------------------------------- profilo modificabile dal pannello
-from .common import FIELD_DEFAULT, POS_NAMES, PROFILE_FIELDS  # noqa: E402
+from .common import FIELD_DEFAULT, PROFILE_FIELDS  # noqa: E402
 
 
 def edit_profile(game, key, value):

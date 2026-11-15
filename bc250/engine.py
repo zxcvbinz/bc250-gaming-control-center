@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """Comunicazione con il motore FPS (libbc250_vk.so / libbc250_gl.so) via memoria condivisa."""
 import glob
 import mmap

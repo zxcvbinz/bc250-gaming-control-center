@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 zxcvbinz and contributors */
 /* VK_LAYER_BC250_frame: implicit Vulkan layer, hooks vkQueuePresentKHR only.
  * Minimal self-contained definitions (no Vulkan headers needed). */
 #include "common.h"

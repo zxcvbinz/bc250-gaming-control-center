@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 CFLAGS = -O2 -fPIC -shared -fvisibility=hidden -Wall -Wno-parentheses
 PREFIX ?= $(HOME)/.local/lib/bc250
 

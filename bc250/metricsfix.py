@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """bc250-metricsfix: real GPU clock in gpu_metrics and pp_dpm_sclk on 8-core BC-250s.
 
 With the 8-core unlock the SMU metrics table changes layout and the GPU clock field

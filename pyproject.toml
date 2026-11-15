@@ -1,0 +1,38 @@
+[project]
+name = "bc250-gaming-control-center"
+version = "0.1.0"
+description = "FPS limiter, in-game overlay, per-game profiles and session history for the AMD BC-250 on Linux"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "zxcvbinz" }]
+keywords = ["bc250", "amd", "linux", "gaming", "overlay", "fps", "vulkan", "steam-deck", "bazzite"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: POSIX :: Linux",
+    "Environment :: X11 Applications :: Qt",
+    "Topic :: Games/Entertainment",
+    "Topic :: System :: Monitoring",
+]
+# PyGObject (D-Bus) and LayerShellQt come from the distribution
+dependencies = ["PyQt6>=6.5", "PyYAML>=6"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.urls]
+Homepage = "https://github.com/zxcvbinz/bc250-gaming-control-center"
+Documentation = "https://github.com/zxcvbinz/bc250-gaming-control-center/tree/main/docs"
+Issues = "https://github.com/zxcvbinz/bc250-gaming-control-center/issues"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B"]
+ignore = ["E501", "E402", "E741"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

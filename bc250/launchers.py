@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """Mette (o toglie) «bc250-run» nelle opzioni di avvio di tutti i giochi: Steam, Lutris, Heroic.
 
 bc250-run senza upscaling nel profilo lancia il gioco invariato, quindi metterlo ovunque è sicuro.

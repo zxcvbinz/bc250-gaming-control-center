@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """bc250-run: lanciatore universale. Opzioni di avvio del gioco:  bc250-run %command%
 
 Legge il profilo del gioco (per SteamAppId o per testo nel comando) e:

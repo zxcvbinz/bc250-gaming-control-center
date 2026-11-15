@@ -11,3 +11,12 @@ __pycache__/
 .idea/
 *.swp
 .DS_Store
+
+# Sviluppo
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/

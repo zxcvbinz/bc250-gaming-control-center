@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """English. Keys are the Italian source strings (see i18n.py); a missing key falls back to Italian.
 Placeholders ({v}, {n}, ...) must be the same as in the key."""
 
@@ -226,9 +228,9 @@ EN = {
     "Riconosci (processo o appid:ID)": "Match (process or appid:ID)",
     "Note": "Notes",
     "Protezione calore: se la CPU supera la soglia, il limite FPS scende di 10 ogni 20 s; quando torna 8°C sotto, "
-    "risale. VRR: sul tuo monitor, all'avvio e alla chiusura del gioco lo schermo diventa nero per un attimo.":
+    "risale. VRR: su molti monitor, all'avvio e alla chiusura del gioco lo schermo diventa nero per un attimo.":
         "Heat guard: if the CPU goes over the threshold, the FPS limit drops by 10 every 20 s; once it is 8°C "
-        "below, it goes back up. VRR: on your monitor the screen goes black for a moment when the game starts and closes.",
+        "below, it goes back up. VRR: on many monitors the screen goes black for a moment when the game starts and closes.",
     "Aggiungi": "Add",
     "Dal gioco in corso": "From running game",
     "Elimina": "Delete",
@@ -324,8 +326,8 @@ EN = {
     "Automatico (giochi a schermo intero)": "Automatic (fullscreen games)",
     "Sempre": "Always",
     "VRR / FreeSync (manuale)": "VRR / FreeSync (manual)",
-    "Con «VRR solo nei giochi» attivo lo decide il servizio. Sul desktop il tuo monitor col VRR sfarfalla.":
-        "With “VRR only in games” on, the service decides. On the desktop your monitor flickers with VRR.",
+    "Con «VRR solo nei giochi» attivo lo decide il servizio. Su alcuni monitor il VRR fa sfarfallare il desktop.":
+        "With “VRR only in games” on, the service decides. On some monitors VRR makes the desktop flicker.",
     "Risoluzione e frequenza": "Resolution and refresh rate",
     "Errore nel cambiare il VRR": "Error changing VRR",
     "Modalità cambiata (KDE chiede conferma se serve).": "Mode changed (KDE asks for confirmation if needed).",
@@ -388,8 +390,8 @@ EN = {
     "La CPU (Zen 2) è al limite a 97°C.": "The CPU (Zen 2) hits its limit at 97°C.",
     "GPU oltre": "GPU above",
     "Ventola sotto": "Fan below",
-    "La tua gira a ~1080 rpm: sotto questa soglia è ferma o guasta.":
-        "Yours runs at ~1080 rpm: below this threshold it is stopped or broken.",
+    "La ventola di serie gira a circa 1000 rpm: sotto questa soglia è ferma o guasta.":
+        "The stock fan runs at about 1000 rpm: below this threshold it is stopped or broken.",
     "Non ripetere prima di": "Don't repeat within",
     "Avvisi salvati.": "Alerts saved.",
     "Prova una notifica": "Send a test notification",
@@ -456,7 +458,6 @@ EN = {
     "Spunta = collegato: parte con bc250-run e può usare l'upscaling FSR del profilo. Le opzioni di avvio che hai già restano.": "Ticked = linked: it starts through bc250-run and can use the profile's FSR upscaling. Your existing launch options are kept.",
     'Collega tutti': 'Link all',
     'Scollega tutti': 'Unlink all',
-    'Aggiorna': 'Refresh',
     'nuovo': 'new',
     'alla chiusura di Steam': 'when Steam closes',
     'Steam è aperto e scrive le opzioni di avvio quando si chiude. Lo riavvio adesso (qualche secondo)? Con «No» lo faccio alla prossima chiusura di Steam.': "Steam is open and writes launch options when it closes. Restart it now (a few seconds)? With «No» I'll do it the next time Steam closes.",

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """Installazione / aggiornamento del Centro di controllo BC-250.
 
 Tutto in file utente, tranne la correzione del clock GPU per le BC-250 a 8 core
@@ -35,6 +37,7 @@ SHORTCUTS = [
     ("bc250-panel.desktop", "BC-250: pannello dettagli", SHIFT | 0x01000031, "toggle-panel"),
     ("bc250-hud.desktop", "BC-250: overlay on/off", SHIFT | 0x01000032, "toggle-hud"),
 ]
+# giochi Flatpak OpenGL noti: il motore FPS va attivato con un override (le Vulkan sono automatiche)
 FLATPAK_GL_APPS = ["com.hypixel.HytaleLauncher"]
 
 
@@ -251,6 +254,14 @@ def remove_metrics_fix():
         pass
 
 
+def install_flatpak_gl():
+    """Giochi Flatpak OpenGL noti (es. Hytale): motore FPS attivo, solo se sono installati."""
+    have = run(["flatpak", "list", "--app", "--columns=application"]).stdout.split()
+    for a in FLATPAK_GL_APPS:
+        if a in have:
+            flatpak_gl(a)
+
+
 def install_launchers():
     """bc250-run in tutti i giochi (Steam chiuso e riaperto se aperto, Lutris, Heroic)."""
     from . import launchers
@@ -273,7 +284,7 @@ def install():
         ("Servizi in background", install_units),
         ("Scorciatoie Shift+F1/F2/F3", register_shortcuts),
         ("Tolgo MangoHud dai giochi (dal prossimo accesso)", disable_mangohud_global),
-        ("Motore OpenGL per Hytale (Flatpak)", lambda: [flatpak_gl(a) for a in FLATPAK_GL_APPS]),
+        ("Motore OpenGL nelle app Flatpak note (se installate)", install_flatpak_gl),
         ("Server MCP per Claude Code", register_mcp),
         ("Clock GPU reale per MangoHud/Steam/LACT (8 core, sudo)", install_metrics_fix),
     ]

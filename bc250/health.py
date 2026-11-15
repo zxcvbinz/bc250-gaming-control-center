@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """Controllo salute BC-250: ogni voce ha stato, dettaglio e (se possibile) una correzione."""
 import json
 import os

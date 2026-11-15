@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """Lettura sensori BC-250 (solo lettura, nessun privilegio richiesto)."""
 import glob
 import os

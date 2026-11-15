@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """BC-250 Control Center — interfaccia principale."""
 import json
 import os
@@ -9,7 +11,7 @@ import threading
 import time
 from collections import deque
 
-from PyQt6.QtCore import QPointF, QRectF, QSize, QStringListModel, Qt, QTimer
+from PyQt6.QtCore import QRectF, QSize, QStringListModel, Qt, QTimer
 from PyQt6.QtGui import QColor, QFont, QIcon, QPixmap, QTextDocument, QLinearGradient, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QCompleter, QFrame,
                              QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
@@ -858,7 +860,7 @@ class ProfilesPage:
         self.table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         c.lay.addWidget(self.table)
         c.lay.addWidget(label(T("Protezione calore: se la CPU supera la soglia, il limite FPS scende di 10 ogni 20 s; "
-                                "quando torna 8°C sotto, risale. VRR: sul tuo monitor, all'avvio e alla chiusura del "
+                                "quando torna 8°C sotto, risale. VRR: su molti monitor, all'avvio e alla chiusura del "
                                 "gioco lo schermo diventa nero per un attimo."), 8.5, P["DIM"], wrap=True))
         btns = QHBoxLayout()
         for text, fn, obj in (("Aggiungi", self.add, None), ("Dal gioco in corso", self.add_current, None),
@@ -946,7 +948,7 @@ class ProfilesPage:
     def save(self):
         profs = []
         for r in range(self.table.rowCount()):
-            def text(c):
+            def text(c, r=r):
                 it = self.table.item(r, c)
                 return it.text().strip() if it else ""
             name, match = text(0), text(1)
@@ -1306,7 +1308,7 @@ class DisplayPage:
             vrr.setCurrentIndex(max(0, vrr.findData(o["vrr"])))
             vrr.activated.connect(lambda _, name=o["name"], cb=vrr: self.set_vrr(name, cb.currentData()))
             c.lay.addWidget(row(T("VRR / FreeSync (manuale)"), vrr, T("Con «VRR solo nei giochi» attivo lo decide il servizio. "
-                                "Sul desktop il tuo monitor col VRR sfarfalla.")))
+                                "Su alcuni monitor il VRR fa sfarfallare il desktop.")))
             modes = QComboBox()
             seen = set()
             for m in sorted(o["modes"], key=lambda m: (-m["w"] * m["h"], -m["hz"])):
@@ -1627,7 +1629,7 @@ class AlertsPage:
             sb.setValue(int(v))
         c.lay.addWidget(row(T("CPU oltre"), self.cpu, T("La CPU (Zen 2) è al limite a 97°C.")))
         c.lay.addWidget(row(T("GPU oltre"), self.gpu, T("Il governor taglia il clock a 85°C.")))
-        c.lay.addWidget(row(T("Ventola sotto"), self.fan, T("La tua gira a ~1080 rpm: sotto questa soglia è ferma o guasta.")))
+        c.lay.addWidget(row(T("Ventola sotto"), self.fan, T("La ventola di serie gira a circa 1000 rpm: sotto questa soglia è ferma o guasta.")))
         c.lay.addWidget(row(T("Non ripetere prima di"), self.cool))
         b = QPushButton(T("Salva"))
         b.setObjectName("primary")

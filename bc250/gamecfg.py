@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """Impostazioni grafiche dei giochi: trova il file, lo legge, confronta, scrive.
 
 Motori supportati:
@@ -8,7 +10,6 @@ Motori supportati:
 I giochi leggono le impostazioni all'avvio e spesso le riscrivono all'uscita: per questo le
 modifiche si scrivono solo a gioco chiuso (il servizio le applica appena il gioco si chiude).
 """
-import glob
 import json
 import os
 import re
@@ -122,7 +123,7 @@ class UnrealIni(Source):
         lines = open(self.path, encoding="utf-8-sig", errors="replace").read().splitlines()
         todo = dict(changes)
         sec, out = "", []
-        for i, line in enumerate(lines):
+        for line in lines:
             s = line.strip()
             if s.startswith("[") and s.endswith("]"):
                 # prima di cambiare sezione, aggiungi le chiavi mancanti di quella appena finita
@@ -236,7 +237,7 @@ class UnityPrefs(Source):
         text = open(self.path, errors="replace").read()
         for name, val in changes.items():
             text, n = re.subn(rf'(<pref name="{re.escape(name)}" type="\w+">)[^<]*(</pref>)',
-                              lambda m: f"{m.group(1)}{val}{m.group(2)}", text)
+                              lambda m, v=val: f"{m.group(1)}{v}{m.group(2)}", text)
             if not n:
                 raise ValueError(f"{name}: non esiste")
         open(self.path, "w").write(text)

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """Lingue dell'interfaccia.
 
 Il testo sorgente è l'italiano: T("Limite FPS") ritorna la traduzione nella lingua attuale,

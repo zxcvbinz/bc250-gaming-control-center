@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 zxcvbinz and contributors
 """Disegno dell'HUD in gioco, condiviso da overlay e anteprima nella GUI (qui niente layer-shell).
 
 Tre stili:

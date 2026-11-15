@@ -14,6 +14,8 @@
   <img alt="Hardware" src="https://img.shields.io/badge/hardware-AMD%20BC--250-4fa3ff?style=flat-square">
   <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3fb950?style=flat-square">
   <img alt="Vulkan + OpenGL" src="https://img.shields.io/badge/engine-Vulkan%20%2B%20OpenGL-a371f7?style=flat-square">
+  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-d29922?style=flat-square"></a>
+  <a href="https://github.com/zxcvbinz/bc250-gaming-control-center/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/zxcvbinz/bc250-gaming-control-center/actions/workflows/ci.yml/badge.svg"></a>
 </p>
 
 ---
@@ -168,5 +170,30 @@ A session stays open while a game is briefly gone (alt+tab, loading). If the sam
 
 ## Notes
 
+- **Status: early (0.1.0).** It is developed and used daily on one BC-250, so expect rough edges on other setups.
+  Game reports and bug reports are very welcome, see [Contributing](CONTRIBUTING.md).
+- **What it changes on your system** (all reversible with `--remove`, files backed up first): Steam/Lutris/Heroic
+  launch options, games' own settings files when you ask it to, a user Vulkan layer, two user services and,
+  optionally, one root service for the 8-core GPU clock fix. See [Security](SECURITY.md).
 - The app is available in **Italian and English** (picker at the bottom of the sidebar; the overlay and notifications follow it live). More languages: add a `bc250/lang_xx.py` file and an entry in `bc250/i18n.py`.
 - Tested on a BC-250 running Bazzite (Fedora 43), kernel 6.17, Mesa 26, with the 8-core unlock.
+- Requirements: KDE Plasma 6 on Wayland for the overlay; the rest works on other desktops. Not affiliated with AMD,
+  Valve or any game publisher.
+
+## Contributing
+
+Bug reports, game compatibility reports, translations and pull requests are welcome: see
+[CONTRIBUTING.md](CONTRIBUTING.md). Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
+## Credits
+
+- [cyan-skillfish-governor](https://github.com/filippor/cyan-skillfish-governor) for GPU clock control and the
+  SMU clock reading used by the 8-core fix.
+- [higorprado/bc250-8core-telemetry-report](https://github.com/higorprado/bc250-8core-telemetry-report) and
+  [GabriWar/bc250-core-cu-unlock](https://github.com/GabriWar/bc250-core-cu-unlock) for the 8-core research.
+- [gamescope](https://github.com/ValveSoftware/gamescope) and AMD FidelityFX Super Resolution for upscaling.
+
+## License
+
+Copyright © 2026 zxcvbinz and contributors. Released under the
+[GNU General Public License v3.0 or later](LICENSE).

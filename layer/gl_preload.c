@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 zxcvbinz and contributors */
 /* libbc250_gl.so: LD_PRELOAD for OpenGL games (GLX and EGL).
  * Hooks the swap calls, including when the game resolves them through
  * dlsym / glXGetProcAddress / eglGetProcAddress (SDL does this). */
