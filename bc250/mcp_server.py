@@ -219,7 +219,7 @@ def t_profiles(_):
 
 def t_save_profile(a):
     prof = {k: a[k] for k in ("name", "match", "fps_limit", "gpu_max", "gpu_min", "vrr", "heat_guard",
-                              "hud", "hud_position", "hud_style", "notes") if k in a}
+                              "hud", "hud_position", "hud_style", "upscale", "opengl", "notes") if k in a}
 
     def fn(c):
         for i, p in enumerate(c["profiles"]):
@@ -339,7 +339,9 @@ TOOLS = {
                       "vrr": {"type": "boolean", "description": "VRR automatico in questo gioco (schermo nero un attimo all'avvio/chiusura)"},
                       "heat_guard": {"type": ["integer", "null"], "description": "°C CPU oltre cui abbassare il limite FPS di 10 ogni 20 s"},
                       "hud": {"type": "boolean"}, "hud_position": {"type": ["string", "null"]},
-                      "hud_style": {"type": ["string", "null"], "description": "bubble, compact, full o null (globale)"},
+                      "hud_style": {"type": ["string", "null"], "description": "bubble, ring, compact, full o null (globale)"},
+                      "upscale": {"type": ["string", "null"], "description": "gamescope+FSR1 dal prossimo avvio (serve bc250-run %command%): q77, q67, q59, q50 o null"},
+                      "opengl": {"type": "boolean", "description": "carica il motore FPS OpenGL tramite bc250-run"},
                       "notes": {"type": "string"}}, ["name"]),
     "get_game_settings": (t_get_game_settings, "Impostazioni grafiche del gioco (in corso o per nome): motore, "
                           "file, valori principali, impostazioni volute dal profilo, storico delle modifiche "

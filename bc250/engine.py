@@ -15,7 +15,7 @@ NO_OVERRIDE = 0xFFFFFFFF
 RING = 256
 # processi che presentano frame ma non sono giochi
 IGNORE = ("steamwebhelper", "plasmashell", "kwin", "Xwayland", "bc250", "python3",
-          "vulkaninfo", "hytale-launcher", "HytaleLauncher", "firefox", "chrome")
+          "vulkaninfo", "gamescope", "hytale-launcher", "HytaleLauncher", "firefox", "chrome")
 
 
 def write_control(fps_limit, limit_enabled, engine_enabled=True):

@@ -77,3 +77,32 @@ throttling from the session → it lowers the heaviest settings (shadows, volume
 - Files are never written while the game runs: Wine and the game would overwrite them.
 - Unknown keys are refused for Unity and No Man's Sky. For Unreal, new keys are added to their section,
   because Unreal accepts many optional keys.
+
+## Upscaling for any game (`bc250-run`)
+
+Games without a supported settings file, or where you just want more FPS and less heat, can use
+**resolution upscaling**, which works with every game.
+
+1. Put `bc250-run %command%` in the game's launch options once (Steam: *Properties → Launch options*.
+   Lutris/Heroic: set the *command prefix* to `bc250-run`).
+2. Choose **FSR upscaling** in the game's profile (Profiles page, Shift+F2 panel, or MCP
+   `save_profile` with `upscale`):
+
+| Preset | Render resolution (each side) | On a 3440×1440 screen |
+|---|---|---|
+| `q77` ultra quality | 77 % | 2648×1108 |
+| `q67` quality | 67 % | 2294×960 |
+| `q59` balanced | 59 % | 2030×850 |
+| `q50` performance | 50 % | 1720×720 |
+
+At the next launch `bc250-run` starts the game inside [gamescope](https://github.com/ValveSoftware/gamescope)
+at the reduced resolution, fullscreen at your screen's resolution and refresh rate, upscaled with
+**AMD FSR 1** (sharpness `display.upscale_sharpness`, default 3; 0 is sharpest, 20 softest. Filter
+`display.upscale_filter`: `fsr`, `nis`, `linear`, `pixel`). If the profile has `vrr: true`, gamescope
+gets `--adaptive-sync`. Gamescope's own shortcuts work in game: Super+U toggles FSR, Super+I/O change
+sharpness.
+
+Without upscaling in the profile, `bc250-run` starts the game unchanged, so it is safe to leave in the
+launch options. It never blocks a launch: on any error it starts the game directly. What it did is logged
+in `~/.local/share/bc250/run.log`. A profile with `opengl: true` also loads the OpenGL FPS engine
+(like `bc250-gl`).

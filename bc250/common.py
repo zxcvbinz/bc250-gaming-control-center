@@ -61,7 +61,8 @@ DEFAULTS = {
     # merge_gap_s: se lo stesso gioco riprende entro questo tempo (alt+tab, caricamenti) è la stessa sessione
     "history": {"enabled": True, "keep_days": 60, "merge_gap_s": 300},
     # VRR acceso solo mentre un gioco è attivo; sul desktop sempre spento
-    "display": {"vrr_games_only": True, "vrr_off_delay_s": 8},
+    # upscale_*: usati da bc250-run per i profili con upscaling (gamescope)
+    "display": {"vrr_games_only": True, "vrr_off_delay_s": 8, "upscale_filter": "fsr", "upscale_sharpness": 3},
     "gpu_default": {"min": 1000, "max": 1750},
     # match: testo contenuto nel nome del processo, oppure "appid:<SteamAppId>"
     "profiles": [
@@ -77,6 +78,9 @@ def _T(text, **kw):
 
 # campi dei profili: (chiave, etichetta, valori, formato) — usati da pannello in gioco e GUI
 # etichette e nomi restano in italiano come dati: si traducono con T() dove si mostrano
+# risoluzione di rendering con gamescope + FSR 1 (serve "bc250-run %command%" nelle opzioni di avvio)
+UPSCALE_NAMES = {None: "spento", "q77": "FSR 77% ultra qualità", "q67": "FSR 67% qualità",
+                 "q59": "FSR 59% bilanciato", "q50": "FSR 50% prestazioni"}
 STYLE_NAMES = {None: "come globale", "bubble": "cerchio", "ring": "anello", "compact": "barra", "full": "completo"}
 POS_NAMES = {None: "come globale", "top-left": "alto sinistra", "top-center": "alto centro",
              "top-right": "alto destra", "bottom-left": "basso sinistra", "bottom-center": "basso centro", "bottom-right": "basso destra"}
@@ -91,9 +95,11 @@ PROFILE_FIELDS = [
     ("hud", "Overlay", [True, False], lambda v, g: _T("visibile") if v in (True, None) else _T("nascosto")),
     ("hud_position", "Posizione overlay", list(POS_NAMES), lambda v, g: _T(POS_NAMES.get(v, str(v)))),
     ("hud_style", "Stile overlay", list(STYLE_NAMES), lambda v, g: _T(STYLE_NAMES.get(v, str(v)))),
+    ("upscale", "Upscaling FSR", list(UPSCALE_NAMES), lambda v, g: _T(UPSCALE_NAMES.get(v, str(v)))),
 ]
 FIELD_DEFAULT = {"fps_limit": None, "gpu_max": None, "vrr": False, "heat_guard": None, "hud": True,
-                 "hud_position": None, "hud_style": None}
+                 "hud_position": None, "hud_style": None,
+                 "upscale": None}
 
 PALETTE = {
     "BG": "#0e1116", "SIDEBAR": "#12161c", "CARD": "#161b22", "CARD2": "#1c232c",

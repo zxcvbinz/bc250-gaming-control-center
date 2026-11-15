@@ -29,7 +29,7 @@ The installer is idempotent: run it again after `git pull` to update. Each step 
 |---|---|
 | Build the FPS engine | `make -C layer install` → `~/.local/lib/bc250/libbc250_vk.so` and `libbc250_gl.so` |
 | Enable the engine in Vulkan/Proton games | writes the implicit layer manifest `~/.local/share/vulkan/implicit_layer.d/bc250_frame.json` |
-| Commands | launchers in `~/.local/bin`: `bc250d`, `bc250-overlay`, `bc250-control`, `bc250ctl`, `bc250-mcp`, `bc250-gl` |
+| Commands | launchers in `~/.local/bin`: `bc250d`, `bc250-overlay`, `bc250-control`, `bc250ctl`, `bc250-mcp`, `bc250-gl`, `bc250-run` |
 | Application menu | `~/.local/share/applications/bc250-control.desktop` |
 | Background services | user units `bc250d.service` and `bc250-overlay.service`, enabled and started |
 | Shortcuts | registers Shift+F1/F2/F3 in KDE global shortcuts (KGlobalAccel) |
@@ -52,7 +52,8 @@ You can turn MangoHud back on from **Games & FPS → MangoHud** in the app.
 | Game type | What to do |
 |---|---|
 | Vulkan, DXVK/VKD3D (almost every Proton game) | nothing: the implicit layer is loaded automatically |
-| Native OpenGL Steam games | launch options: `bc250-gl %command%` |
+| Native OpenGL Steam games | launch options: `bc250-gl %command%` (or `bc250-run %command%` with `opengl: true` in the profile) |
+| FSR upscaling, any game | launch options: `bc250-run %command%`, then pick the upscaling in the profile |
 | OpenGL Flatpak apps (e.g. Hytale launcher) | toggle the app in **Games & FPS → OpenGL games** |
 | Skip the engine for one game | launch options: `DISABLE_BC250_LAYER=1 %command%` |
 

@@ -35,6 +35,8 @@ are always matched by process name. For Windows games the process name is the `.
 | `hud` | `true` / `false` | show the overlay in this game |
 | `hud_position` | `null` (global) or an anchor | overlay position in this game |
 | `hud_style` | `null` (global), `bubble`, `ring`, `compact`, `full` | overlay style in this game |
+| `upscale` | `null`, `q77`, `q67`, `q59`, `q50` | render at that resolution and upscale with FSR 1 via gamescope (needs `bc250-run %command%`, [details](graphics.md#upscaling-for-any-game-bc250-run)) |
+| `opengl` | `true` / `false` | with `bc250-run`: load the OpenGL FPS engine |
 | `graphics` | `{key: value}` | the game's own graphics settings to enforce, applied when the game closes ([details](graphics.md)) |
 | `notes` | text | free notes |
 

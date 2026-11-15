@@ -60,6 +60,9 @@ babysitting. This app keeps an eye on it while you play and lets you tune each g
   launch, records changes you make while playing as marks in the session, and applies settings from the
   game profile when the game closes, with backups. An AI assistant can tune them through MCP.
   → [In-game graphics settings](docs/graphics.md)
+- **FSR upscaling for any game**: with `bc250-run %command%` in the launch options, the game profile can run
+  it at 77/67/59/50 % resolution inside gamescope, upscaled with AMD FSR 1. More FPS and less heat on the
+  BC-250's single fan. → [Upscaling](docs/graphics.md#upscaling-for-any-game-bc250-run)
 - **Real GPU clock for every tool on 8-core boards**: after the 8-core unlock the SMU metrics table
   loses the GPU clock, so MangoHud, the Steam overlay and LACT show 3–100 MHz. `bc250-metricsfix`
   (a small root service) writes the real clock, read by
@@ -104,6 +107,7 @@ Full docs live in [`docs/`](docs/README.md):
 | `bc250d` | User service: sensors, running game, profiles, SQLite history, alerts. Writes the live state to `/dev/shm/bc250-$UID/state.json`. |
 | `bc250-overlay` | HUD, details panel and toasts as Wayland layer-shell surfaces, so they stay on top of fullscreen games. |
 | `bc250-control` | The desktop app (PyQt6). |
+| `bc250-run` | Universal launcher (`bc250-run %command%`): applies the profile's FSR upscaling through gamescope, or starts the game unchanged. |
 | `bc250ctl` | Quick commands: `toggle-limit`, `toggle-panel`, `toggle-hud`, `limit <n\|off>`, `status`. |
 | `bc250-mcp` | MCP server (stdio) for AI assistants. |
 | `bc250-metricsfix` | Root service (installed with `sudo`): real GPU clock in `gpu_metrics` / `pp_dpm_sclk` on 8-core BC-250s. Starts and restarts with the governor. |

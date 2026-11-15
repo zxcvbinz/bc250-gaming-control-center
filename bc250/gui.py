@@ -580,6 +580,19 @@ class GamesPage:
                              T("Copia questo testo in Proprietà → Opzioni di avvio del gioco.")))
         lay.addWidget(gl)
 
+        up = Card(T("Lanciatore e upscaling"), T("Con «bc250-run %command%» nelle opzioni di avvio, il profilo del gioco "
+                  "può farlo girare a risoluzione ridotta ingrandita con FSR 1 (gamescope): più FPS e meno calore, "
+                  "con qualsiasi gioco. Senza upscaling nel profilo il gioco parte normalmente."))
+        run = QLineEdit("bc250-run %command%")
+        run.setReadOnly(True)
+        run.setMinimumWidth(220)
+        up.lay.addWidget(row(T("Opzioni di avvio (tutti i giochi)"), run,
+                             T("Steam: Proprietà → Opzioni di avvio. Lutris/Heroic: «prefisso del comando» = bc250-run.")))
+        up.lay.addWidget(label(T("Scegli l'upscaling nel profilo del gioco (Profili o Shift+F2): 77% ultra qualità, "
+                                 "67% qualità, 59% bilanciato, 50% prestazioni. Vale dal prossimo avvio."),
+                               8.5, P["DIM"], wrap=True))
+        lay.addWidget(up)
+
         mh = Card("MangoHud")
         self.mh = label("", 9.5, P["MUTED"], wrap=True)
         mh.lay.addWidget(self.mh)

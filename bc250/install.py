@@ -78,6 +78,10 @@ def install_commands():
     for name, module in COMMANDS.items():
         write(os.path.join(BIN, name),
               f'#!/bin/sh\ncd "{ROOT}" && exec python3 -m {module} "$@"\n', 0o755)
+    # lanciatore universale (opzioni di avvio: bc250-run %command%): senza cd, il gioco
+    # deve partire nella sua cartella
+    write(os.path.join(BIN, "bc250-run"),
+          f'#!/bin/sh\nexport PYTHONPATH="{ROOT}${{PYTHONPATH:+:$PYTHONPATH}}"\nexec python3 -m bc250.run "$@"\n', 0o755)
     # per i giochi Steam OpenGL nativi:  bc250-gl %command%
     write(os.path.join(BIN, "bc250-gl"),
           f'#!/bin/sh\nexport LD_PRELOAD="{common.LIB_DIR}/libbc250_gl.so${{LD_PRELOAD:+:$LD_PRELOAD}}"\nexec "$@"\n',
@@ -279,7 +283,7 @@ def remove():
              "org.kde.KGlobalAccel", "unRegister", "as", "2", desktop, "_launch"])
     for f in [common.LAYER_MANIFEST] + [os.path.join(APPS, d) for d, *_ in SHORTCUTS] + \
              [os.path.join(APPS, "bc250-control.desktop")] + [os.path.join(BIN, n) for n in COMMANDS] + \
-             [os.path.join(BIN, "bc250-gl"), common.MANGOHUD_FLAG]:
+             [os.path.join(BIN, "bc250-gl"), os.path.join(BIN, "bc250-run"), common.MANGOHUD_FLAG]:
         try:
             os.remove(f)
         except OSError:
