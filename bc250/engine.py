@@ -86,6 +86,9 @@ class FrameSource:
                     continue
                 name = m[16:48].split(b"\0")[0].decode(errors="replace")
                 appid = m[48:64].split(b"\0")[0].decode(errors="replace")
+                # i giochi non-Steam sotto Proton hanno SteamAppId "default" o "0": non è un id
+                if not appid.isdigit() or appid == "0":
+                    appid = ""
                 frames, last = struct.unpack_from("<QQ", m, 64)
                 idx, override, active = struct.unpack_from("<3I", m, 80)
                 age = (now - last) / 1e9 if last else 1e9

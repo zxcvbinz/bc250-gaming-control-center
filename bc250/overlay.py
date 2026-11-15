@@ -127,9 +127,12 @@ def edit_profile(game, key, value):
         prof = None
         if game.get("profile"):
             prof = next((p for p in c["profiles"] if p.get("name") == game["profile"]), None)
+        name = game["name"].removesuffix(".exe")
+        match = f"appid:{game['appid']}" if game.get("appid") else game["name"]
         if prof is None:
-            name = game["name"].removesuffix(".exe")
-            match = f"appid:{game['appid']}" if game.get("appid") else game["name"]
+            # il servizio può non aver ancora riportato il profilo appena creato: niente doppioni
+            prof = next((p for p in c["profiles"] if p.get("match") == match or p.get("name") == name), None)
+        if prof is None:
             prof = {"name": name, "match": match}
             c["profiles"].append(prof)
         prof[key] = value
