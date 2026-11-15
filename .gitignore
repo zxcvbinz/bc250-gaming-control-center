@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# Binari compilati (si ricompilano con `make -C layer`)
+*.so
+*.o
+
+# Editor / sistema
+.vscode/
+.idea/
+*.swp
+.DS_Store
