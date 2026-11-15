@@ -68,7 +68,7 @@ Desktop notifications (plus an on-screen toast for critical ones).
 | `history.merge_gap_s` | `300` | same game back within this time = same session |
 | `display.vrr_games_only` | `true` | manage VRR per game (see [Profiles](profiles.md#vrr)) |
 | `display.vrr_off_delay_s` | `8` | seconds after the game closes before VRR goes off |
-| `launcher.mode` | `"ask"` | newly installed games: `ask` (notification with Link/Ignore), `auto`, `off` ([details](graphics.md#automatic-mode-in-detail)) |
+| `launcher.mode` | `"ask"` | new games (installed or seen running): `ask` (listed as new in the Games page, you tick them), `auto`, `off` ([details](graphics.md#automatic-mode-in-detail)) |
 | `display.upscale_filter` / `.upscale_sharpness` | `fsr` / `3` | gamescope filter and sharpness for profiles with `upscale` |
 | `gpu_default.min` / `.max` | `1000` / `1750` | governor range without a profile |
 | `language` | `"it"` | language of the app, overlay and notifications: `it`, `en` (also from the picker at the bottom of the sidebar) |
@@ -81,6 +81,8 @@ Desktop notifications (plus an on-screen toast for critical ones).
 | `~/.config/bc250/config.json` | settings and profiles |
 | `~/.config/bc250/mangohud-disabled` | flag: MangoHud not loaded in games |
 | `~/.local/share/bc250/history.db` | history (SQLite, WAL) |
+| `~/.local/share/bc250/known_games.json` | every game found or seen running, and whether it is linked |
+| `~/.local/share/bc250/launch/*.sh`, `~/.local/share/applications/bc250-game-*.desktop` | launchers created for detected games |
 | `~/.local/lib/bc250/` | engine libraries |
 | `~/.local/share/vulkan/implicit_layer.d/bc250_frame.json` | Vulkan layer manifest |
 | `/dev/shm/bc250-$UID/` | live data: `state.json`, `control.bin`, `fps-<pid>-*.bin`, `overlay.sock` |
@@ -96,5 +98,6 @@ bc250ctl toggle-panel      # Shift+F2
 bc250ctl toggle-hud        # Shift+F3
 bc250ctl limit 75          # global limit (or: off)
 bc250ctl status            # live state as JSON
-bc250-control --page 3     # open the app on a page (0 = Dashboard … 7 = Alerts)
+bc250-control --page 1     # open the app on a page (0 Dashboard, 1 Games, 2 FPS & engine, 3 Profiles,
+                           # 4 Overlay, 5 Display, 6 Health, 7 History, 8 Alerts)
 ```

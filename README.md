@@ -54,6 +54,7 @@ babysitting. This app keeps an eye on it while you play and lets you tune each g
 - **Session history** grouped by game: FPS, 1% lows, temperatures, clocks and power for every session.
   Alt+tab or long loading screens do not split a session.
   → [Session history](docs/history.md)
+- **Search everywhere**: a search box in the sidebar finds any setting, page or game and takes you there.
 - **Health checks and alerts**: desktop notifications and on-screen toasts for temperature, fan and RAM.
   → [Alert settings](docs/configuration.md#alerts) · [Troubleshooting](docs/troubleshooting.md)
 - **In-game graphics settings**: reads each game's own settings (Unreal Engine, Unity, No Man's Sky) at
@@ -63,8 +64,8 @@ babysitting. This app keeps an eye on it while you play and lets you tune each g
 - **FSR upscaling for any game, plug & play**: one switch puts the `bc250-run` launcher in every Steam, Lutris
   and Heroic game (keeping your options), then the game profile can run
   it at 77/67/59/50 % resolution inside gamescope, upscaled with AMD FSR 1. More FPS and less heat on the
-  BC-250's single fan. Games you install later are detected and you get a notification asking whether to
-  link them. → [Upscaling](docs/graphics.md#upscaling-for-any-game-bc250-run)
+  BC-250's single fan. Games you install, and games started any other way (scripts, distrobox, emulators), show up
+  in the **Games** page as *new*: no pop-ups while you play, tick them later. → [Upscaling](docs/graphics.md#upscaling-for-any-game-bc250-run)
 - **Real GPU clock for every tool on 8-core boards**: after the 8-core unlock the SMU metrics table
   loses the GPU clock, so MangoHud, the Steam overlay and LACT show 3–100 MHz. `bc250-metricsfix`
   (a small root service) writes the real clock, read by

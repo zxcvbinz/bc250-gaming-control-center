@@ -9,9 +9,9 @@ import threading
 import time
 from collections import deque
 
-from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, QTimer
+from PyQt6.QtCore import QPointF, QRectF, QSize, QStringListModel, Qt, QTimer
 from PyQt6.QtGui import QColor, QFont, QIcon, QPixmap, QTextDocument, QLinearGradient, QPainter, QPainterPath, QPen
-from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QFrame,
+from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QCompleter, QFrame,
                              QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
                              QListWidget, QListWidgetItem, QMessageBox, QPushButton, QScrollArea,
                              QSizePolicy, QSlider, QSpinBox, QStackedWidget, QTableWidget, QTableWidgetItem, QTreeWidget, QTreeWidgetItem,
@@ -72,6 +72,10 @@ QListWidget#items::item:selected {{ background:{P['CARD2']}; color:{P['TEXT']}; 
 QListWidget#items::indicator {{ width:16px; height:16px; border-radius:4px; }}
 QListWidget#items::indicator:unchecked {{ border:1px solid {P['MUTED']}; background:{P['BG']}; }}
 QListWidget#items::indicator:checked {{ border:1px solid {P['ACCENT']}; background:{P['ACCENT']}; image:url({ASSETS}/check.svg); }}
+QLineEdit#find {{ background:{P['BG']}; border:1px solid {P['BORDER']}; border-radius:8px; padding:6px 8px; }}
+QLineEdit#find:focus {{ border-color:{P['ACCENT']}; }}
+QListView#findpop {{ background:{P['CARD2']}; color:{P['TEXT']}; border:1px solid {P['BORDER']}; padding:4px;
+    selection-background-color:{P['ACCENT']}; outline:0; }}
 QScrollArea {{ border:none; }}
 QScrollBar:vertical {{ background:transparent; width:8px; }}
 QScrollBar::handle:vertical {{ background:{P['OFF']}; border-radius:4px; min-height:30px; }}
@@ -591,35 +595,7 @@ class GamesPage:
         up.lay.addWidget(label(T("Scegli l'upscaling nel profilo del gioco (Profili o Shift+F2): 77% ultra qualità, "
                                  "67% qualità, 59% bilanciato, 50% prestazioni. Vale dal prossimo avvio."),
                                8.5, P["DIM"], wrap=True))
-        self.mode = QComboBox()
-        for k, t in (("ask", "Chiedimi se collegarli"), ("auto", "Collegali da soli"), ("off", "Non fare niente")):
-            self.mode.addItem(T(t), k)
-        self.mode.setCurrentIndex(max(0, self.mode.findData(common.load_config().get("launcher", {}).get("mode", "ask"))))
-        self.mode.activated.connect(lambda *_: common.update_config(
-            lambda c: c.setdefault("launcher", {}).update(mode=self.mode.currentData())))
-        up.lay.addWidget(row(T("Giochi che installerai"), self.mode,
-                             T("Il Control Center li rileva da solo (Steam, Lutris, Heroic) e ti manda una notifica.")))
         lay.addWidget(up)
-
-        gc = Card(T("I tuoi giochi"), T("Spunta = collegato: parte con bc250-run e può usare l'upscaling FSR del profilo. "
-                                        "Le opzioni di avvio che hai già restano."))
-        self.glist = QListWidget()
-        self.glist.setObjectName("items")
-        self.glist.setFixedHeight(300)
-        self.glist.itemChanged.connect(self.game_toggled)
-        gc.lay.addWidget(self.glist)
-        btns = QHBoxLayout()
-        for text, fn in ((T("Collega tutti"), lambda: self.link_all(True)),
-                         (T("Scollega tutti"), lambda: self.link_all(False)),
-                         (T("Aggiorna"), self.load_games)):
-            b = QPushButton(text)
-            b.clicked.connect(fn)
-            btns.addWidget(b)
-        btns.addStretch()
-        gc.lay.addLayout(btns)
-        lay.addWidget(gc)
-        self.launch_result = None
-        self.load_games()
 
         mh = Card("MangoHud")
         self.mh = label("", 9.5, P["MUTED"], wrap=True)
@@ -651,6 +627,126 @@ class GamesPage:
         write_control(e["fps_limit"], e["limit_enabled"], e["enabled"])
         self.win.toast(T("Limite FPS: {v}", v=lim) if lim and en else T("Limite FPS: disattivato"))
 
+    def toggle_mangohud(self, on):
+        if on:
+            os.makedirs(common.CONF_DIR, exist_ok=True)
+            open(common.MANGOHUD_FLAG, "w").close()
+        elif os.path.exists(common.MANGOHUD_FLAG):
+            os.remove(common.MANGOHUD_FLAG)
+        self.win.toast(T("Salvato: vale dal prossimo accesso alla sessione."))
+
+    def refresh(self, st):
+        gs = st.get("games") or []
+        g = st.get("game")
+        if gs:
+            self.live.setText("<br>".join(
+                f"<b>{x['name']}</b> <span style='color:{P['MUTED']}'>{x['api']}</span> — {x['fps']:.0f} FPS"
+                + (" · " + T("limite applicato <b>{v}</b>", v=g["limit"])
+                   if g and g['name'] == x['name'] and g.get('limit') else "")
+                for x in gs))
+        else:
+            self.live.setText(f"<span style='color:{P['MUTED']}'>{T('Nessun gioco sta disegnando frame.')}</span>")
+        mh = health.mangohud_global() if int(time.time()) % 10 == 0 or not self.mh.text() else None
+        if mh is not None:
+            self.mh.setText(T("MangoHud è ancora caricato nella sessione attuale.") if mh
+                            else T("MangoHud non viene più caricato nei giochi."))
+
+
+class LibraryPage:
+    """Tutti i giochi: installati (Steam, Lutris, Heroic, non Steam dentro Steam) e rilevati quando partono.
+    Spunta = collegato (parte con bc250-run: profilo, upscaling FSR)."""
+    FILTERS = [("all", "Tutti"), ("pending", "Nuovi"), ("linked", "Collegati"), ("unlinked", "Non collegati"),
+               ("seen", "Rilevati in gioco")]
+
+    def __init__(self, win):
+        self.win = win
+        self.w, lay = page(T("Giochi"), T("Tutti i tuoi giochi: quelli installati e quelli rilevati quando li avvii "
+                                          "(anche fuori da Steam, per esempio da uno script o da distrobox). Spunta un "
+                                          "gioco per collegarlo: parte con bc250-run e può usare il profilo e "
+                                          "l'upscaling FSR."))
+        top = QHBoxLayout()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText(T("Cerca un gioco…"))
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(self.apply_filter)
+        top.addWidget(self.search, 1)
+        self.filter = QComboBox()
+        for k, t in self.FILTERS:
+            self.filter.addItem(T(t), k)
+        self.filter.activated.connect(self.apply_filter)
+        top.addWidget(self.filter)
+        lay.addLayout(top)
+
+        gc = Card()
+        self.glist = QListWidget()
+        self.glist.setObjectName("items")
+        self.glist.setMinimumHeight(420)
+        self.glist.itemChanged.connect(self.game_toggled)
+        self.glist.currentItemChanged.connect(self.show_details)
+        gc.lay.addWidget(self.glist)
+        self.details = label("", 9, P["MUTED"], wrap=True)
+        gc.lay.addWidget(self.details)
+        btns = QHBoxLayout()
+        for text, fn in ((T("Collega tutti"), lambda: self.link_all(True)),
+                         (T("Scollega tutti"), lambda: self.link_all(False)),
+                         (T("Aggiorna"), self.load_games)):
+            b = QPushButton(text)
+            b.clicked.connect(fn)
+            btns.addWidget(b)
+        btns.addStretch()
+        gc.lay.addLayout(btns)
+        lay.addWidget(gc)
+
+        mc = Card(T("Giochi nuovi"))
+        self.mode = QComboBox()
+        for k, t in (("ask", "Aggiungili qui come «nuovi», li collego io"), ("auto", "Collegali da soli"),
+                     ("off", "Non fare niente")):
+            self.mode.addItem(T(t), k)
+        self.mode.setCurrentIndex(max(0, self.mode.findData(common.load_config().get("launcher", {}).get("mode", "ask"))))
+        self.mode.activated.connect(lambda *_: common.update_config(
+            lambda c: c.setdefault("launcher", {}).update(mode=self.mode.currentData())))
+        mc.lay.addWidget(row(T("Quando installi o avvii un gioco nuovo"), self.mode,
+                             T("Nessuna notifica durante il gioco: i nuovi compaiono qui, con il numero accanto a "
+                               "«Giochi» nel menu.")))
+        lay.addWidget(mc)
+        lay.addStretch()
+        self.launch_result = None
+        self.known = {}
+        self.load_games()
+
+    def apply_filter(self, *_):
+        q = self.search.text().strip().lower()
+        f = self.filter.currentData()
+        for i in range(self.glist.count()):
+            it = self.glist.item(i)
+            k = it.data(Qt.ItemDataRole.UserRole)
+            g = self.known.get(k, {})
+            st = g.get("status")
+            ok = (f == "all" or (f == "pending" and st == "pending") or (f == "linked" and st in ("linked", "queued"))
+                  or (f == "unlinked" and st not in ("linked", "queued")) or (f == "seen" and k.startswith("seen:")))
+            text = f"{g.get('name', '')} {g.get('store', '')} {g.get('process', '')}".lower()
+            it.setHidden(bool(not ok or (q and q not in text)))
+
+    def show_details(self, it, *_):
+        if not it:
+            self.details.setText("")
+            return
+        k = it.data(Qt.ItemDataRole.UserRole)
+        g = self.known.get(k, {})
+        parts = [f"<b>{g.get('name', k)}</b> · {g.get('store', '')}"]
+        launch = g.get("launch") or {}
+        if launch.get("cmd"):
+            cmd = " ".join(launch["cmd"])
+            parts.append(T("Avviato con: {c}", c=(cmd[:160] + "…") if len(cmd) > 160 else cmd))
+            if launch.get("container"):
+                parts.append(T("Dentro il container distrobox «{c}».", c=launch["container"]))
+        if k.startswith("seen:"):
+            parts.append(T("Collegandolo crei «{n} (BC-250)» nel menu delle applicazioni: avvialo da lì per usare "
+                           "profilo e upscaling.", n=g.get("name", "")))
+        elif k.startswith(("steam:", "shortcut:")):
+            parts.append(T("Collegarlo scrive bc250-run nelle opzioni di avvio di Steam (le tue opzioni restano)."))
+        self.details.setText("<br>".join(parts))
+
     def load_games(self):
         from . import launchers
         try:
@@ -658,6 +754,7 @@ class GamesPage:
         except Exception as e:
             print("scan:", e, file=sys.stderr)
         known = launchers.load_known()
+        self.known = known
         self.glist.blockSignals(True)
         self.glist.clear()
         labels = {"linked": "", "pending": T("nuovo"), "queued": T("alla chiusura di Steam"), "ignored": ""}
@@ -672,6 +769,7 @@ class GamesPage:
                 it.setForeground(QColor(P["WARN"]))
             self.glist.addItem(it)
         self.glist.blockSignals(False)
+        self.apply_filter()
 
     def game_toggled(self, it):
         self.do_link([it.data(Qt.ItemDataRole.UserRole)], it.checkState() == Qt.CheckState.Checked)
@@ -735,29 +833,9 @@ class GamesPage:
         threading.Thread(target=work, daemon=True).start()
         self.wait_result()
 
-    def toggle_mangohud(self, on):
-        if on:
-            os.makedirs(common.CONF_DIR, exist_ok=True)
-            open(common.MANGOHUD_FLAG, "w").close()
-        elif os.path.exists(common.MANGOHUD_FLAG):
-            os.remove(common.MANGOHUD_FLAG)
-        self.win.toast(T("Salvato: vale dal prossimo accesso alla sessione."))
 
     def refresh(self, st):
-        gs = st.get("games") or []
-        g = st.get("game")
-        if gs:
-            self.live.setText("<br>".join(
-                f"<b>{x['name']}</b> <span style='color:{P['MUTED']}'>{x['api']}</span> — {x['fps']:.0f} FPS"
-                + (" · " + T("limite applicato <b>{v}</b>", v=g["limit"])
-                   if g and g['name'] == x['name'] and g.get('limit') else "")
-                for x in gs))
-        else:
-            self.live.setText(f"<span style='color:{P['MUTED']}'>{T('Nessun gioco sta disegnando frame.')}</span>")
-        mh = health.mangohud_global() if int(time.time()) % 10 == 0 or not self.mh.text() else None
-        if mh is not None:
-            self.mh.setText(T("MangoHud è ancora caricato nella sessione attuale.") if mh
-                            else T("MangoHud non viene più caricato nei giochi."))
+        pass
 
 
 class ProfilesPage:
@@ -1573,7 +1651,8 @@ class AlertsPage:
 
 # ---------------------------------------------------------------- finestra
 class Main(QWidget):
-    PAGES = [("Panoramica", "utilities-system-monitor", Dashboard), ("Giochi e FPS", "applications-games", GamesPage),
+    PAGES = [("Panoramica", "utilities-system-monitor", Dashboard), ("Giochi", "applications-games", LibraryPage),
+             ("FPS e motore", "speedometer", GamesPage),
              ("Profili", "view-list-details", ProfilesPage), ("Overlay", "view-visible", OverlayPage),
              ("Display", "video-display", DisplayPage), ("Salute", "security-high", HealthPage),
              ("Storico", "view-history", HistoryPage), ("Avvisi", "dialog-warning", AlertsPage)]
@@ -1611,6 +1690,27 @@ class Main(QWidget):
         sub = label("Control Center", 9, P["MUTED"])
         sub.setContentsMargins(20, 0, 0, 8)
         sl.addWidget(sub)
+        self.find = QLineEdit()
+        self.find.setObjectName("find")
+        self.find.setPlaceholderText("🔍  " + T("Cerca impostazioni e giochi…"))
+        self.find.setClearButtonEnabled(True)
+        self.find_model = QStringListModel()
+        comp = QCompleter(self.find_model, self.find)
+        comp.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        comp.setFilterMode(Qt.MatchFlag.MatchContains)
+        comp.setMaxVisibleItems(14)
+        comp.popup().setObjectName("findpop")
+        comp.activated.connect(self.goto_result)
+        self.find.setCompleter(comp)
+        self.find.textEdited.connect(lambda *_: self.build_index())
+        self.find.returnPressed.connect(lambda: self.goto_result(self.find.text()))
+        fw = QWidget()
+        fl = QHBoxLayout(fw)
+        fl.setContentsMargins(12, 0, 12, 6)
+        fl.addWidget(self.find)
+        sl.addWidget(fw)
+        self.find_index = {}
+        self.find_built = 0
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
         sl.addWidget(self.nav, 1)
@@ -1634,22 +1734,6 @@ class Main(QWidget):
         right = QVBoxLayout(content)
         right.setContentsMargins(0, 0, 0, 0)
         right.setSpacing(0)
-        self.banner = QFrame()
-        self.banner.setObjectName("card")
-        bl = QHBoxLayout(self.banner)
-        bl.setContentsMargins(16, 8, 12, 8)
-        self.banner_l = label("", 10)
-        self.banner_l.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        bl.addWidget(self.banner_l, 1)
-        for text, fn in ((T("Collega"), lambda: self.banner_act("link")), (T("Ignora"), lambda: self.banner_act("ignore")),
-                         (T("Vedi"), lambda: self.nav.setCurrentRow(1))):
-            b = QPushButton(text)
-            if text == T("Collega"):
-                b.setObjectName("primary")
-            b.clicked.connect(fn)
-            bl.addWidget(b)
-        self.banner.hide()
-        right.addWidget(self.banner)
         self.stack = QStackedWidget()
         right.addWidget(self.stack, 1)
         self.toast_l = label("", 9.5, P["ACCENT"])
@@ -1688,8 +1772,58 @@ class Main(QWidget):
         self.build(cur)
         self.tick()
 
+    # ------------------------------------------------------------ ricerca
+    def build_index(self, force=False):
+        """Indice di ricerca: pagine, titoli delle card, voci, pulsanti e giochi (ricostruito ogni 10 s)."""
+        if not force and time.time() - self.find_built < 10:
+            return
+        self.find_built = time.time()
+        idx = {}
+        for i, (name, _icon, _cls) in enumerate(self.PAGES):
+            pname = T(name)
+            idx[f"{pname}"] = (i, None, None)
+            root = self.pages[i].w
+            for wdg in root.findChildren((QLabel, QCheckBox, QPushButton)):
+                txt = re.sub(r"<[^>]+>|&nbsp;", " ", wdg.text() or "")
+                txt = re.sub(r"\s+", " ", txt).strip(" ·:")
+                if 2 < len(txt) <= 70 and not re.fullmatch(r"[\d\s.,%°/·—–-]+[A-Za-z]{0,4}", txt):
+                    key = f"{txt[:1].upper() + txt[1:] if txt.isupper() else txt}  —  {pname}"
+                    idx.setdefault(key, (i, wdg, None))
+        try:
+            from . import launchers
+            for k, g in launchers.load_known().items():
+                idx[f"🎮 {g.get('name', k)}  —  {T('Giochi')}"] = (1, None, g.get("name", k))
+        except Exception:
+            pass
+        self.find_index = idx
+        self.find_model.setStringList(sorted(idx, key=str.lower))
+
+    def goto_result(self, text):
+        self.build_index()
+        hit = self.find_index.get(text)
+        if not hit:   # invio senza scegliere: primo risultato che contiene il testo
+            q = text.strip().lower()
+            hit = next((v for k, v in sorted(self.find_index.items()) if q and q in k.lower()), None)
+        if not hit:
+            return
+        i, wdg, game = hit
+        self.nav.setCurrentRow(i)
+        if game is not None:
+            self.pages[1].search.setText(game)
+            return
+        if wdg is not None:
+            area = self.pages[i].w
+            QTimer.singleShot(50, lambda: area.ensureWidgetVisible(wdg, 0, 120))
+            card = wdg
+            while card is not None and not isinstance(card, Card):
+                card = card.parentWidget()
+            if card is not None:
+                card.setStyleSheet(f"QFrame#card {{ border:2px solid {P['ACCENT']}; }}")
+                QTimer.singleShot(1800, lambda c=card: c.setStyleSheet(""))
+        QTimer.singleShot(0, self.find.clear)
+
     def check_new_games(self, force=False):
-        """Avviso in cima quando il servizio ha trovato giochi nuovi da collegare."""
+        """Numero dei giochi nuovi accanto a «Giochi» nel menu (niente notifiche)."""
         from . import launchers
         try:
             m = os.stat(launchers.KNOWN_PATH).st_mtime
@@ -1698,24 +1832,13 @@ class Main(QWidget):
         if not force and m == getattr(self, "_known_m", None):
             return
         self._known_m = m
-        pend = launchers.pending()
-        self.pending_keys = list(pend)
-        if pend:
-            names = ", ".join(v.get("name", k) for k, v in list(pend.items())[:4]) + ("…" if len(pend) > 4 else "")
-            self.banner_l.setText("🎮 " + T("Nuovi giochi rilevati: {g}. Collegarli al Control Center?", g=names))
-        self.banner.setVisible(bool(pend))
-
-    def banner_act(self, act):
-        from . import launchers
-        keys = getattr(self, "pending_keys", [])
-        if not keys:
-            return
-        if act == "ignore":
-            launchers.ignore(keys)
-            self.check_new_games(force=True)
-            return
-        games = self.pages[1]
-        games.do_link(keys, True)
+        n = len(launchers.pending())
+        it = self.nav.item(1)
+        if it:
+            it.setText(T("Giochi") + (f"   ● {n}" if n else ""))
+            it.setForeground(QColor(P["WARN"]) if n else QColor(P["MUTED"]))
+        if n and self.stack.currentIndex() == 1:
+            self.pages[1].load_games()
 
     def toast(self, text):
         self.toast_l.setText(text)

@@ -307,6 +307,10 @@ class Daemon:
             self.hist.start(game, self.profile["name"] if self.profile else None, self.gap())
         if self.gfx_game != game["name"] or not self.gfx:
             self.gfx_start(game)
+            try:   # gioco lanciato fuori da Steam/Lutris/Heroic (es. script, distrobox): va nei «rilevati»
+                launchers.record_seen(game)
+            except Exception as ex:
+                print("record_seen:", repr(ex), file=sys.stderr, flush=True)
             if self.profile and self.profile.get("upscale") and launchers.launched_with_run(game["pid"]) is False:
                 common.overlay_send("toast:" + T("Upscaling non attivo: il gioco non è partito con bc250-run"))
 
@@ -395,36 +399,12 @@ class Daemon:
             self.scan_lock.release()
 
     def _launcher_scan(self):
+        """Giochi installati di recente: finiscono nella pagina Giochi come «nuovi». Niente notifiche:
+        si collegano dal Control Center quando vuoi (o da soli con launcher.mode = auto)."""
         try:
-            mode = self.cfg.get("launcher", {}).get("mode", "ask")
-            new = launchers.scan(mode)
+            launchers.scan(self.cfg.get("launcher", {}).get("mode", "ask"))
         except Exception as ex:
             print("launcher:", repr(ex), file=sys.stderr, flush=True)
-            return
-        if not new or mode != "ask":
-            return
-        known = launchers.load_known()
-        names = [known[k]["name"] for k in new]
-        title = T("Nuovo gioco: {g}", g=names[0]) if len(names) == 1 else T("{n} nuovi giochi", n=len(names))
-        body = T("Collegarlo al Control Center? Potrai usare l'upscaling FSR e le impostazioni dal profilo.") \
-            if len(names) == 1 else ", ".join(names[:6])
-        try:
-            r = subprocess.run(["notify-send", "-a", "BC-250", "-i", "applications-games", "-t", "0",
-                                "-A", "link=" + T("Collega"), "-A", "ignore=" + T("Ignora"),
-                                "-A", "open=" + T("Apri"), title, body],
-                               capture_output=True, text=True, timeout=6 * 3600)
-        except (OSError, subprocess.TimeoutExpired):
-            return
-        act = r.stdout.strip()
-        if act == "link":
-            done, queued = launchers.link(new)
-            if queued:
-                notify("BC-250", T("Verrà collegato appena chiudi Steam."))
-        elif act == "ignore":
-            launchers.ignore(new)
-        elif act == "open":
-            subprocess.Popen([os.path.expanduser("~/.local/bin/bc250-control"), "--page", "1"],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
     def track_session(self, game):
         if game:

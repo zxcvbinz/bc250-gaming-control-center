@@ -118,16 +118,21 @@ in `~/.local/share/bc250/run.log`. A profile with `opengl: true` also loads the 
 - **Existing options are kept.** `bc250-run` goes right before `%command%`, after any variables
   (`PROTON_USE_WINED3D=1 bc250-run %command% -skip_intro`). If MangoHud is turned off in the app, a plain
   `mangohud %command%` becomes `bc250-run %command%`.
-- **New games:** every couple of minutes the daemon looks for newly installed games (Steam, Lutris, Heroic).
-  What happens depends on **Games & FPS → Games you install later** (`launcher.mode`):
-  - *Ask me* (`ask`, default): a desktop notification "New game: …" with **Link / Ignore / Open** buttons,
-    plus a banner at the top of the Control Center until you answer;
-  - *Link automatically* (`auto`): linked without asking;
-  - *Do nothing* (`off`).
-  Linking a Steam game while Steam is open is queued and done as soon as Steam closes, unless you choose to
-  restart Steam right away. Games already installed when the feature first runs are never asked about.
-- **Your games** (Games & FPS) lists every installed game with a tick for *linked*. Untick or tick one
-  game at a time, or use *Link all* / *Unlink all*.
+- **New games, no notifications:** the daemon looks for newly installed games (Steam, Lutris, Heroic,
+  non-Steam games added to Steam) every couple of minutes, and it also records **every game it sees
+  running**, even ones started outside any store (a script, a distrobox container, an emulator). New games
+  appear in the **Games** page marked *new*, with a count next to *Games* in the menu. Nothing pops up
+  while you play: link them later with a tick. **Games → New games** (`launcher.mode`): *add them as new*
+  (`ask`, default), *link automatically* (`auto`) or *do nothing* (`off`).
+- **What linking does:**
+  | Game | Linking |
+  |---|---|
+  | Steam | `bc250-run` in its launch options (needs Steam closed: restart it now, or it is done when Steam closes) |
+  | Non-Steam game in Steam | `bc250-run` in the shortcut's launch options (`shortcuts.vdf`) |
+  | Lutris / Heroic | command prefix / wrapper |
+  | Detected game started some other way | a launcher **"<Game> (BC-250)"** in the application menu, which repeats the exact command, folder and distrobox container through `bc250-run`, plus a profile for the game. Start the game from it to get upscaling |
+- **Games page:** search box, filters (all, new, linked, not linked, detected in game), and for each game
+  how it was started.
 - **In game**, the Shift+F2 panel shows whether the running game is *linked ✓* (started through
   `bc250-run`, with the active upscaling) or *not linked*.
 - **Lutris** entries that are Steam games are skipped: they already go through Steam's launch options.

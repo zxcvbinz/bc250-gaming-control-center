@@ -75,8 +75,9 @@ shared with the app's preview, so the preview is exactly what you get in game.
 
 ## App (`bc250-control`)
 
-PyQt6, Fusion style with its own dark palette. Pages: Dashboard, Games & FPS, Profiles, Overlay, Display,
-Health, History, Alerts. It refreshes the visible page once per second from `state.json`, and writes only
+PyQt6, Fusion style with its own dark palette. Pages: Dashboard, Games, FPS & engine, Profiles, Overlay,
+Display, Health, History, Alerts. A search box at the top of the sidebar indexes every page, card, setting
+and game; picking a result opens the page, scrolls to it and highlights the card. It refreshes the visible page once per second from `state.json`, and writes only
 `config.json`.
 
 ## Source map
@@ -94,5 +95,9 @@ Health, History, Alerts. It refreshes the visible page once per second from `sta
 | `bc250/mcp_server.py` | MCP server |
 | `bc250/ctl.py` | `bc250ctl` |
 | `bc250/metricsfix.py` | root service for the 8-core clock fix |
+| `bc250/launchers.py` | launcher in every game: Steam (text and binary VDF), Lutris, Heroic, detected games |
+| `bc250/gamecfg.py` | in-game graphics settings |
+| `bc250/run.py` | `bc250-run` launcher (gamescope + FSR) |
+| `bc250/i18n.py`, `bc250/lang_en.py` | Italian/English |
 | `bc250/install.py` | installer |
 | `layer/` | C engine |
