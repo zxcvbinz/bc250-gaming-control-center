@@ -25,9 +25,13 @@ the file only needs what you changed.
 | `margin` | `24` | px from the screen edge |
 | `scale` | `1.0` | 0.6 – 2.0 |
 | `opacity` | `0.82` | background opacity |
-| `items` | fps, frametime, cpu_temp, gpu_temp, gpu_clk, power | metrics for `compact` and `full`. Also `low1`, `gpu_busy`, `cpu_load`, `fan`, `ram`, `vram` |
+| `items` | fps, frametime, cpu_temp, gpu_temp, gpu_clk, power | ordered list of shown values for `ring`, `compact` and `full`. Also `low1`, `gpu_busy`, `cpu_load`, `fan`, `ram`, `vram`, `ft` (frametime in ms), `cpu_clk`. The ring uses up to 8 (`frametime` = mini graph in the centre) |
 | `graph` | `true` | frametime graph in `full` |
-| `ring.slots` | cpu_temp, gpu_temp, power, gpu_clk | the four ring values: top, right, bottom, left |
+| `look.labels` | `true` | captions next to/under the numbers |
+| `look.border` | `false` | border in the main colour |
+| `look.limit_badge` | `true` | show `⏵ limit` next to the FPS |
+| `look.colors` | `"status"` | `status` (traffic light) or `mono` (only problems in colour) |
+| `look.accent` | `"#4fa3ff"` | main colour |
 
 ### `overlay.bubble` (bubble and ring)
 

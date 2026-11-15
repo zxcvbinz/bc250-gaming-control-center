@@ -9,7 +9,7 @@ import time
 from collections import deque
 
 from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, QTimer
-from PyQt6.QtGui import QColor, QFont, QIcon, QTextDocument, QLinearGradient, QPainter, QPainterPath, QPen
+from PyQt6.QtGui import QColor, QFont, QIcon, QPixmap, QTextDocument, QLinearGradient, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QFrame,
                              QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
                              QListWidget, QListWidgetItem, QMessageBox, QPushButton, QScrollArea,
@@ -19,7 +19,8 @@ from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboB
 from . import common, health, i18n
 from .engine import write_control
 from .i18n import T
-from .hudpaint import CENTER, DEMOS, IDLE, RING_DEFAULT, RING_SLOTS, STYLES, WATCH, HudPainter, demo_state
+from .hudpaint import (ACCENTS, CENTER, DEMOS, IDLE, LOOK_DEFAULT, STYLES, WATCH, HudPainter,
+                       demo_state)
 from .install import FLATPAK_GL_APPS, flatpak_gl, flatpak_gl_enabled
 from .sensors import Sensors, governor_set
 
@@ -63,6 +64,13 @@ QTreeWidget#hist {{ background:{P['SIDEBAR']}; border:none; border-right:1px sol
 QTreeWidget#hist::item {{ padding:7px 6px; border-radius:8px; margin:1px 0; color:{P['MUTED']}; }}
 QTreeWidget#hist::item:selected {{ background:{P['CARD2']}; color:{P['TEXT']}; }}
 QTreeWidget#hist::item:hover:!selected {{ background:{P['CARD']}; }}
+QListWidget#items {{ background:{P['BG']}; border:1px solid {P['BORDER']}; border-radius:8px; padding:4px; outline:0; }}
+QListWidget#items::item {{ padding:4px 6px; border-radius:6px; }}
+QListWidget#items::item:hover {{ background:{P['CARD2']}; }}
+QListWidget#items::item:selected {{ background:{P['CARD2']}; color:{P['TEXT']}; }}
+QListWidget#items::indicator {{ width:16px; height:16px; border-radius:4px; }}
+QListWidget#items::indicator:unchecked {{ border:1px solid {P['MUTED']}; background:{P['BG']}; }}
+QListWidget#items::indicator:checked {{ border:1px solid {P['ACCENT']}; background:{P['ACCENT']}; image:url({ASSETS}/check.svg); }}
 QScrollArea {{ border:none; }}
 QScrollBar:vertical {{ background:transparent; width:8px; }}
 QScrollBar::handle:vertical {{ background:{P['OFF']}; border-radius:4px; min-height:30px; }}
@@ -765,7 +773,8 @@ class ProfilesPage:
 
 ITEMS = [("fps", "FPS"), ("frametime", "Grafico frametime"), ("low1", "1% low"), ("cpu_temp", "Temperatura CPU"),
          ("gpu_temp", "Temperatura GPU"), ("gpu_clk", "Clock GPU"), ("power", "Consumo"), ("gpu_busy", "Carico GPU"),
-         ("cpu_load", "Carico CPU"), ("fan", "Ventola"), ("ram", "RAM"), ("vram", "VRAM")]
+         ("cpu_load", "Carico CPU"), ("fan", "Ventola"), ("ram", "RAM"), ("vram", "VRAM"),
+         ("ft", "Frametime (ms)"), ("cpu_clk", "Clock CPU")]
 POSITIONS = [("In alto a sinistra", "top-left"), ("In alto al centro", "top-center"),
              ("In alto a destra", "top-right"), ("In basso a sinistra", "bottom-left"),
              ("In basso al centro", "bottom-center"), ("In basso a destra", "bottom-right")]
@@ -884,8 +893,8 @@ class OverlayPage:
         for k, t in STYLES:
             self.style.addItem(T(t), k)
         self.style.setCurrentIndex(max(0, self.style.findData(o.get("style", "bubble"))))
-        a.lay.addWidget(row(T("Stile"), self.style, T("Cerchio: solo FPS, si allarga quando serve · Anello: FPS e 4 valori sempre "
-                            "visibili in 112 px · Barra: una riga · Completo: grafico e tutte le metriche.")))
+        a.lay.addWidget(row(T("Stile"), self.style, T("Cerchio: solo FPS, si allarga quando serve · Anello: FPS e fino a 8 valori "
+                            "sempre visibili · Barra: una riga · Completo: grafico e tutte le metriche.")))
         self.only = QCheckBox()
         self.only.setChecked(o["only_in_game"])
         a.lay.addWidget(row(T("Solo mentre giochi"), self.only, T("Se spento resta sempre visibile sul desktop.")))
@@ -912,19 +921,6 @@ class OverlayPage:
         lay.addWidget(a)
 
         self.bcard = Card(T("Cerchio e anello"))
-        self.slots = []
-        slots = (o.get("ring") or {}).get("slots") or RING_DEFAULT
-        self.slot_rows = []
-        for i, text in enumerate(("Anello: valore in alto", "Anello: valore a destra", "Anello: valore in basso",
-                                  "Anello: valore a sinistra")):
-            cb = QComboBox()
-            for k, t in RING_SLOTS:
-                cb.addItem(T(t), k)
-            cb.setCurrentIndex(max(0, cb.findData(slots[i] if i < len(slots) else RING_DEFAULT[i])))
-            self.slots.append(cb)
-            rw = row(T(text), cb)
-            self.slot_rows.append(rw)
-            self.bcard.lay.addWidget(rw)
         self.center = QComboBox()
         for k, t in CENTER:
             self.center.addItem(T(t), k)
@@ -967,16 +963,47 @@ class OverlayPage:
             self.bcard.lay.addWidget(row(T(text), sb, hint and T(hint)))
         lay.addWidget(self.bcard)
 
-        self.icard = Card(T("Cosa mostrare (barra e completo)"))
-        grid = QGridLayout()
-        self.items = {}
-        for i, (k, t) in enumerate(ITEMS):
-            cb = QCheckBox(T(t))
-            cb.setChecked(k in o["items"])
-            self.items[k] = cb
-            grid.addWidget(cb, i // 3, i % 3)
-        self.icard.lay.addLayout(grid)
+        self.icard = Card(T("Valori mostrati"), T("Spunta cosa vedere e trascina per cambiare l'ordine. "
+                                                  "Anello: un arco per valore (da 2 a 8, si allarga da solo), "
+                                                  "«Grafico frametime» va al centro sotto gli FPS."))
+        self.items = QListWidget()
+        self.items.setObjectName("items")
+        self.items.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.items.setDefaultDropAction(Qt.DropAction.MoveAction)
+        names = dict(ITEMS)
+        order = [k for k in o["items"] if k in names] + [k for k, _ in ITEMS if k not in o["items"]]
+        for k in order:
+            it = QListWidgetItem(T(names[k]))
+            it.setData(Qt.ItemDataRole.UserRole, k)
+            it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsDragEnabled)
+            it.setCheckState(Qt.CheckState.Checked if k in o["items"] else Qt.CheckState.Unchecked)
+            self.items.addItem(it)
+        self.items.setFixedHeight(self.items.count() * (max(24, self.items.sizeHintForRow(0)) + 2) + 14)
+        self.icard.lay.addWidget(self.items)
         lay.addWidget(self.icard)
+
+        lk = {**LOOK_DEFAULT, **(o.get("look") or {})}
+        self.lcard = Card(T("Aspetto dei valori"))
+        self.labels, self.border, self.badge = QCheckBox(), QCheckBox(), QCheckBox()
+        for cb, key, text, hint in (
+                (self.labels, "labels", "Etichette", "CPU, GPU, W… sotto o accanto ai numeri."),
+                (self.border, "border", "Bordo colorato", None),
+                (self.badge, "limit_badge", "Mostra il limite FPS", "⏵ 90 accanto agli FPS, ∞ senza limite.")):
+            cb.setChecked(bool(lk[key]))
+            self.lcard.lay.addWidget(row(T(text), cb, hint and T(hint)))
+        self.colors = QComboBox()
+        self.colors.addItem(T("A semaforo (verde, arancio, rosso)"), "status")
+        self.colors.addItem(T("Monocromatico (colorati solo i problemi)"), "mono")
+        self.colors.setCurrentIndex(max(0, self.colors.findData(lk["colors"])))
+        self.lcard.lay.addWidget(row(T("Colori"), self.colors))
+        self.accent = QComboBox()
+        for col, name in ACCENTS:
+            pm = QPixmap(14, 14)
+            pm.fill(QColor(col))
+            self.accent.addItem(QIcon(pm), T(name), col)
+        self.accent.setCurrentIndex(max(0, self.accent.findData(lk["accent"])))
+        self.lcard.lay.addWidget(row(T("Colore principale"), self.accent, T("Bordo, limite FPS e valori in monocromatico.")))
+        lay.addWidget(self.lcard)
 
         c = Card(T("Tasti rapidi"))
         c.lay.addWidget(label(
@@ -989,10 +1016,12 @@ class OverlayPage:
         c.lay.addWidget(bt, 0, Qt.AlignmentFlag.AlignLeft)
         lay.addWidget(c)
 
-        for w in [self.visible, self.only] + list(self.watch.values()) + list(self.items.values()):
+        for w in [self.visible, self.only, self.labels, self.border, self.badge] + list(self.watch.values()):
             w.toggled.connect(self.save)
-        for w in [self.pos, self.style, self.center, self.idle] + self.slots:
+        for w in [self.pos, self.style, self.center, self.idle, self.colors, self.accent]:
             w.activated.connect(self.save)
+        self.items.itemChanged.connect(self.save)
+        self.items.model().rowsMoved.connect(self.save)
         for w in [self.margin, self.scale, self.opacity, self.hold] + list(self.th.values()):
             w.valueChanged.connect(self.save)
         lay.addStretch()
@@ -1003,10 +1032,8 @@ class OverlayPage:
         style = self.style.currentData()
         round_ = style in ("bubble", "ring")
         self.bcard.setVisible(round_)
-        self.icard.setVisible(not round_)
+        self.icard.setVisible(style != "bubble")
         self.center_row.setVisible(style == "bubble")
-        for rw in self.slot_rows:
-            rw.setVisible(style == "ring")
 
     def set_scenario(self, *_):
         self.preview.scenario = self.scen.currentData()
@@ -1015,7 +1042,11 @@ class OverlayPage:
     def save(self, *_):
         if self.loading:
             return
-        items = [k for k, _ in ITEMS if self.items[k].isChecked()]
+        items = [self.items.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.items.count())
+                 if self.items.item(i).checkState() == Qt.CheckState.Checked]
+        lk = {"labels": self.labels.isChecked(), "border": self.border.isChecked(),
+              "limit_badge": self.badge.isChecked(), "colors": self.colors.currentData(),
+              "accent": self.accent.currentData()}
         bub = {"center": self.center.currentData(), "idle": self.idle.currentData(), "hold_s": self.hold.value(),
                "watch": [k for k, _ in WATCH if self.watch[k].isChecked()],
                **{k: sb.value() for k, sb in self.th.items()}}
@@ -1026,7 +1057,7 @@ class OverlayPage:
                 position=self.pos.currentData(), margin=self.margin.value(), style=self.style.currentData(),
                 scale=self.scale.value() / 100, opacity=self.opacity.value() / 100, items=items)
             c["overlay"].setdefault("bubble", {}).update(bub)
-            c["overlay"]["ring"] = {"slots": [cb.currentData() for cb in self.slots]}
+            c["overlay"]["look"] = lk
         cfg = common.update_config(fn)
         self.sync_cards()
         self.preview.set_cfg(cfg)

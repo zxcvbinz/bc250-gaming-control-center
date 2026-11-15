@@ -50,9 +50,13 @@ be *hidden*. Hidden means nothing on screen at all until a problem appears.
 
 ### Full ring
 
-A watch face: FPS in the middle (red when below target) and four arcs at top, right, bottom and left.
-Each arc fills with its value and takes its colour from it. Choose the four values in
-**Overlay → Bubble & ring**:
+A watch face: FPS in the middle (red when below target) and **one arc per value, from 2 to 8**, starting
+at the top and going clockwise. Each arc fills with its value and takes its colour from it. The ring
+grows with the number of values: 112 px up to 4, 136 px up to 6, 160 px up to 8.
+
+The values and their order come from **Overlay → Shown values**, the same list the compact bar and the
+full panel use. Tick what you want and drag to reorder. If *Frametime graph* is ticked, a mini graph
+of the last 40 frames appears under the FPS. The ring can show:
 
 | Value | Arc full at | Colour |
 |---|---|---|
@@ -63,9 +67,26 @@ Each arc fills with its value and takes its colour from it. Choose the four valu
 | RAM / VRAM | total | green, orange above the RAM threshold |
 | Fan | 2000 rpm | red if stopped |
 | 1% low | current FPS | green, orange below 75 % of FPS |
+| Frametime (ms) | 2× the target frame time | green near target, orange above |
+| CPU clock | 3500 MHz | blue |
 
 When any watched condition is active, an orange or red **halo** surrounds the ring. The ring uses the same
 thresholds and *when everything is fine* setting as the bubble.
+
+## Customising the look
+
+**Overlay → Value style** applies to the ring, the compact bar and the full panel (and the bubble border):
+
+| Option | Effect |
+|---|---|
+| Labels | small CPU / GPU / W… captions next to or under the numbers. Off = numbers only |
+| Coloured border | a thin border in the main colour |
+| Show the FPS limit | `⏵ 90` next to the FPS (`∞` with no limit) |
+| Colours | *traffic light*: every value green/orange/red by status. *Monochrome*: values in white and arcs in the main colour; only warnings and problems stay orange/red |
+| Main colour | blue, green, purple, white, coral or amber |
+
+Together with size, opacity, position and margin, these settings go from a tiny, almost invisible ring
+to a full benchmark panel. The preview at the top of the page updates live.
 
 ## Details panel (Shift+F2)
 

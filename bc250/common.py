@@ -36,7 +36,8 @@ DEFAULTS = {
         "items": ["fps", "frametime", "cpu_temp", "gpu_temp", "gpu_clk", "power"],
         "graph": True,
         "style": "bubble",        # bubble (cerchio intelligente), ring (anello completo), compact, full
-        "ring": {"slots": ["cpu_temp", "gpu_temp", "power", "gpu_clk"]},  # alto, destra, basso, sinistra
+        # aspetto dei valori (anello, barra, completo): vedi hudpaint.LOOK_DEFAULT
+        "look": {"labels": True, "border": False, "limit_badge": True, "colors": "status", "accent": "#4fa3ff"},
         # cerchio: mostra solo un valore e si allarga quando qualcosa richiede attenzione
         "bubble": {
             "center": "fps",      # fps, cpu_temp, gpu_temp, power

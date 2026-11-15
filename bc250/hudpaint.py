@@ -97,7 +97,28 @@ def draw_series(p, rect, values, vmax, color, fill=True, width=1.6, vmin=0.0):
 ITEM_LABELS = {
     "cpu_temp": "CPU", "gpu_temp": "GPU", "gpu_clk": "CLK", "power": "W", "gpu_busy": "GPU%",
     "cpu_load": "CPU%", "fan": "FAN", "ram": "RAM", "vram": "VRAM", "low1": "1%",
+    "cpu_clk": "CPU MHz", "ft": "MS",
 }
+
+LOOK_DEFAULT = {"labels": True, "border": False, "colors": "status", "accent": "#4fa3ff", "limit_badge": True}
+ACCENTS = [("#4fa3ff", "Blu"), ("#3fb950", "Verde"), ("#a371f7", "Viola"), ("#e6edf3", "Bianco"),
+           ("#ff7b72", "Corallo"), ("#d29922", "Ambra")]
+
+
+def look(cfg):
+    return {**LOOK_DEFAULT, **(cfg["overlay"].get("look") or {})}
+
+
+def tint(col, lk, arc=False):
+    """Colori «a semaforo» o monocromatici: in mono restano colorati solo avvisi e problemi."""
+    if lk["colors"] == "mono" and col not in (P["BAD"], P["WARN"]):
+        return lk["accent"] if arc else P["TEXT"]
+    return col
+
+
+def shown_items(o):
+    """Valori scelti dall'utente, nell'ordine scelto (FPS e grafico frametime esclusi)."""
+    return [i for i in o.get("items", []) if i not in ("fps", "frametime")]
 
 
 def metric_value(it, s, g):
@@ -132,6 +153,12 @@ def metric_value(it, s, g):
         return (f"{r[0]:.0f}M" if r[0] else "—"), P["TEXT"]
     if it == "low1":
         return (f"{g['low1']:.0f}" if g.get("low1") else "—"), P["TEXT"]
+    if it == "cpu_clk":
+        c = v("cpu_mhz")
+        return (f"{c:.0f}" if c else "—"), P["TEXT"]
+    if it == "ft":
+        ft = g.get("frametime")
+        return (f"{ft:.1f}" if ft else "—"), P["TEXT"]
     return "—", P["MUTED"]
 
 
@@ -231,7 +258,27 @@ def ring_value(key, st, cfg):
         lo, fps = g.get("low1"), g.get("fps")
         return "1%", (f"{lo:.0f}" if lo else "—"), min(1.0, lo / fps) if lo and fps else 0, \
             P["GOOD"] if lo and fps and lo >= fps * 0.75 else P["WARN"]
+    if key == "cpu_clk":
+        c = s.get("cpu_mhz")
+        return "CPU MHz", (f"{c:.0f}" if c else "—"), min(1.0, (c or 0) / 3500), P["ACCENT"]
+    if key == "ft":
+        ft, lim = g.get("frametime"), g.get("limit")
+        tgt = 1000 / lim if lim else 16.7
+        return "MS", (f"{ft:.1f}" if ft else "—"), min(1.0, (ft or 0) / (2 * tgt)), \
+            P["GOOD"] if ft and ft <= tgt * 1.15 else P["WARN"]
     return key, "—", 0, P["MUTED"]
+
+
+def ring_items(o):
+    items = shown_items(o)[:8]
+    if len(items) < 2:
+        items = ((o.get("ring") or {}).get("slots") or RING_DEFAULT)[:4]
+    return items
+
+
+def ring_diameter(o):
+    n = len(ring_items(o))
+    return 112 if n <= 4 else 136 if n <= 6 else 160
 
 
 RING_KEYS = {"cpu_temp": ("cpu_temp",), "gpu_temp": ("gpu_temp",), "gpu_clk": ("throttling",),
@@ -319,14 +366,15 @@ class HudPainter:
         sc = float(o["scale"])
         style = o.get("style", "bubble")
         if style == "ring":
-            return int(math.ceil(self.DR * sc)) + 2, int(math.ceil(self.DR * sc)) + 2
+            d = ring_diameter(o)
+            return int(math.ceil(d * sc)) + 2, int(math.ceil(d * sc)) + 2
         if style == "bubble":
             w = self.D + 12 + len(WATCH) * self.CELL if expanded else self.w_cur
             return int(math.ceil(w * sc)) + 2, int(math.ceil(self.D * sc)) + 2
         if style == "compact":
             w = sum(QFontMetrics(font(f, b)).horizontalAdvance(t) for t, _c, f, b in self.compact_parts(state, o))
             return int((w + 28) * sc), int(30 * sc)
-        items = [i for i in o["items"] if i not in ("fps", "frametime")]
+        items = shown_items(o)
         w = int((150 + 64 * max(0, len(items) - 2) if items else 150) * sc)
         w = max(w, int(190 * sc))
         h = int((44 + (34 if "frametime" in o["items"] and o.get("graph", True) else 0)
@@ -362,7 +410,8 @@ class HudPainter:
         wu = max(D, min(self.w_cur, W - 1))
         x0 = (W - 1 - wu) if right else 1
         p.setOpacity(max(0.0, min(1.0, self.alpha)))
-        p.setPen(QPen(qc(P["BORDER"], 160), 1))
+        lk = look(cfg)
+        p.setPen(QPen(qc(lk["accent"], 200), 1.5) if lk["border"] else QPen(qc(P["BORDER"], 160), 1))
         p.setBrush(qc(P["BG"], int(255 * float(o["opacity"]))))
         p.drawRoundedRect(QRectF(x0, 1, wu, D - 2), (D - 2) / 2, (D - 2) / 2)
         cx = x0 + wu - D / 2 if right else x0 + D / 2
@@ -431,7 +480,8 @@ class HudPainter:
 
     def paint_ring(self, p, st, cfg):
         o = cfg["overlay"]
-        D = self.DR
+        lk = look(cfg)
+        D = ring_diameter(o)
         R = D / 2
         cx = cy = R + 1
         g = st.get("game") or {}
@@ -441,70 +491,96 @@ class HudPainter:
         if self.active:
             cols = [self.colors[k] for k in self.active]
             alarm = P["BAD"] if P["BAD"] in cols else P["WARN"]
-        p.setPen(QPen(qc(alarm, 220), 2.5) if alarm else QPen(qc(P["BORDER"], 160), 1))
+        if alarm:
+            p.setPen(QPen(qc(alarm, 220), 2.5))
+        elif lk["border"]:
+            p.setPen(QPen(qc(lk["accent"], 200), 1.5))
+        else:
+            p.setPen(QPen(qc(P["BORDER"], 160), 1))
         p.setBrush(qc(P["BG"], int(255 * float(o["opacity"]))))
         p.drawEllipse(QPointF(cx, cy), R - 1, R - 1)
 
-        slots = (o.get("ring") or {}).get("slots") or RING_DEFAULT
+        items = ring_items(o)
+        n = len(items)
         rr = QRectF(cx - R + 8, cy - R + 8, D - 16, D - 16)
-        # posizioni del testo: alto, destra, basso, sinistra
-        spots = [(0, -R * 0.56), (R * 0.56, 0), (0, R * 0.56), (-R * 0.56, 0)]
-        for i, key in enumerate(slots[:4]):
+        seg = 360 / n
+        gap = 14 if n <= 4 else 10
+        tr = R * (0.56 if n <= 4 else 0.6)
+        for i, key in enumerate(items):
             lab, txt, frac, col = ring_value(key, st, cfg)
             for k in RING_KEYS.get(key, ()):
                 if k in self.active:
                     col = self.colors[k]
-            mid = 90 - i * 90           # gradi Qt: 0 = destra, antiorario
-            start, span = mid + 38, -76
+            mid = 90 - i * seg          # gradi Qt: 0 = destra, antiorario; si parte dall'alto
+            span = seg - gap
+            start = mid + span / 2
             p.setBrush(Qt.BrushStyle.NoBrush)
             pen = QPen(qc(P["OFF"]), 4)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             p.setPen(pen)
-            p.drawArc(rr, int(start * 16), int(span * 16))
+            p.drawArc(rr, int(start * 16), int(-span * 16))
             if frac > 0:
-                pen = QPen(qc(col), 4)
+                pen = QPen(qc(tint(col, lk, arc=True)), 4)
                 pen.setCapStyle(Qt.PenCapStyle.RoundCap)
                 p.setPen(pen)
-                p.drawArc(rr, int(start * 16), int(span * frac * 16))
-            dx, dy = spots[i]
-            box = QRectF(cx + dx - 22, cy + dy - 10, 44, 20)
-            p.setFont(font(8, True))
-            p.setPen(qc(col))
-            p.drawText(box.adjusted(0, -3, 0, -3), Qt.AlignmentFlag.AlignCenter, txt)
-            p.setFont(font(4.6, True))
-            p.setPen(qc(P["DIM"]))
-            p.drawText(QRectF(box.left(), box.bottom() - 6, box.width(), 7), Qt.AlignmentFlag.AlignCenter, lab)
-        # FPS al centro
+                p.drawArc(rr, int(start * 16), int(-span * frac * 16))
+            ang = math.radians(mid)
+            bx, by = cx + tr * math.cos(ang), cy - tr * math.sin(ang)
+            box = QRectF(bx - 22, by - 10, 44, 20)
+            p.setFont(font(8 if n <= 6 else 7.5, True))
+            p.setPen(qc(tint(col, lk)))
+            p.drawText(box.adjusted(0, -3 if lk["labels"] else 0, 0, -3 if lk["labels"] else 0),
+                       Qt.AlignmentFlag.AlignCenter, txt)
+            if lk["labels"]:
+                p.setFont(font(4.6, True))
+                p.setPen(qc(P["DIM"]))
+                p.drawText(QRectF(box.left(), box.bottom() - 6, box.width(), 7), Qt.AlignmentFlag.AlignCenter, lab)
+        # centro: limite, FPS, mini grafico frametime
         fps = g.get("fps")
+        limit = g.get("limit") or 0
         txt = f"{fps:.0f}" if fps else "—"
+        graph = "frametime" in o.get("items", []) and g.get("frametimes")
+        dy = -3 if graph else 0
+        if lk["limit_badge"] and g:
+            p.setFont(font(4.8, True))
+            p.setPen(qc(lk["accent"] if limit else P["DIM"]))
+            p.drawText(QRectF(cx - 22, cy - 21 + dy, 44, 8), Qt.AlignmentFlag.AlignCenter,
+                       f"⏵ {limit}" if limit else "∞")
         p.setFont(font(14 if len(txt) < 4 else 11.5, True))
-        p.setPen(qc(P["BAD"] if "fps_drop" in self.active else fps_col(fps, g.get("limit") or 0)))
-        p.drawText(QRectF(cx - 22, cy - 13, 44, 22), Qt.AlignmentFlag.AlignCenter, txt)
-        p.setFont(font(4.6, True))
-        p.setPen(qc(P["MUTED"]))
-        p.drawText(QRectF(cx - 22, cy + 7, 44, 8), Qt.AlignmentFlag.AlignCenter, "FPS")
+        fc = P["BAD"] if "fps_drop" in self.active else fps_col(fps, limit)
+        p.setPen(qc(tint(fc, lk)))
+        p.drawText(QRectF(cx - 22, cy - 13 + dy, 44, 22), Qt.AlignmentFlag.AlignCenter, txt)
+        if graph:
+            fts = g["frametimes"][-40:]
+            tgt = 1000.0 / limit if limit else sum(fts) / len(fts)
+            gr = QRectF(cx - 15, cy + 8, 30, 7)
+            draw_series(p, gr, fts, max(tgt * 2, max(fts) * 1.1), tint(fc, lk, arc=True), fill=False, width=1)
+        elif lk["labels"]:
+            p.setFont(font(4.6, True))
+            p.setPen(qc(P["MUTED"]))
+            p.drawText(QRectF(cx - 22, cy + 7, 44, 8), Qt.AlignmentFlag.AlignCenter, "FPS")
 
     @staticmethod
-    def compact_parts(st, o):
+    def compact_parts(st, o, lk=None):
+        lk = lk or {**LOOK_DEFAULT, **(o.get("look") or {})}
         g = st.get("game") or {}
         s = st.get("sensors") or {}
         fps = g.get("fps")
-        parts = [(f"{fps:.0f}" if fps else "—", fps_col(fps, g.get("limit") or 0), 10.5, True),
+        parts = [(f"{fps:.0f}" if fps else "—", tint(fps_col(fps, g.get("limit") or 0), lk), 10.5, True),
                  (" FPS", P["MUTED"], 7, True)]
-        for it in o["items"]:
-            if it in ("fps", "frametime"):
-                continue
+        for it in shown_items(o):
             val, col = metric_value(it, s, g)
-            parts.append(("   " + ITEM_LABELS.get(it, it) + " ", P["DIM"], 7, True))
-            parts.append((val, col, 9, True))
+            parts.append(("   " + (ITEM_LABELS.get(it, it) + " " if lk["labels"] else ""), P["DIM"], 7, True))
+            parts.append((val, tint(col, lk), 9, True))
         return parts
 
     def paint_compact(self, p, st, o, W, H):
-        p.setPen(Qt.PenStyle.NoPen)
+        lk = {**LOOK_DEFAULT, **(o.get("look") or {})}
+        p.setPen(QPen(qc(lk["accent"], 200), 1.5) if lk["border"] else Qt.PenStyle.NoPen)
         p.setBrush(qc(P["BG"], int(255 * float(o["opacity"]))))
         p.drawRoundedRect(QRectF(0, 0, W, H), H / 2, H / 2)
         x = 14
-        for txt, col, size, bold in self.compact_parts(st, o):
+        for txt, col, size, bold in self.compact_parts(st, o, lk):
             f = font(size, bold)
             p.setFont(f)
             p.setPen(qc(col))
@@ -513,7 +589,8 @@ class HudPainter:
             x += w
 
     def paint_full(self, p, st, o, W, H):
-        p.setPen(Qt.PenStyle.NoPen)
+        lk = {**LOOK_DEFAULT, **(o.get("look") or {})}
+        p.setPen(QPen(qc(lk["accent"], 200), 1.5) if lk["border"] else Qt.PenStyle.NoPen)
         p.setBrush(qc(P["BG"], int(255 * float(o["opacity"]))))
         p.drawRoundedRect(QRectF(0, 0, W, H), 10, 10)
         g = st.get("game") or {}
@@ -522,15 +599,15 @@ class HudPainter:
         limit = g.get("limit") or 0
         x, y = 12, 8
         p.setFont(font(20, True))
-        p.setPen(qc(fps_col(fps, limit)))
+        p.setPen(qc(tint(fps_col(fps, limit), lk)))
         txt = f"{fps:.0f}" if fps else "—"
         p.drawText(QRectF(x, y, 80, 32), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, txt)
         tw = QFontMetrics(font(20, True)).horizontalAdvance(txt)
         p.setFont(font(7.5, True))
         p.setPen(qc(P["MUTED"]))
         p.drawText(QRectF(x + tw + 5, y + 4, 40, 12), Qt.AlignmentFlag.AlignLeft, "FPS")
-        if g:
-            badge, col = (f"⏵ {limit}", P["ACCENT"]) if limit else ("∞", P["DIM"])
+        if g and lk["limit_badge"]:
+            badge, col = (f"⏵ {limit}", lk["accent"]) if limit else ("∞", P["DIM"])
             p.setFont(font(7.5, True))
             p.setPen(qc(col))
             p.drawText(QRectF(x + tw + 5, y + 17, 50, 12), Qt.AlignmentFlag.AlignLeft, badge)
@@ -550,19 +627,20 @@ class HudPainter:
             if fts:
                 target = 1000.0 / limit if limit else (sum(fts) / len(fts))
                 vmax = max(target * 2.2, max(fts) * 1.1)
-                draw_series(p, r, fts, vmax, fps_col(fps, limit), fill=True, width=1.3)
+                draw_series(p, r, fts, vmax, tint(fps_col(fps, limit), lk, arc=True), fill=True, width=1.3)
             y += 34
-        items = [i for i in o["items"] if i not in ("fps", "frametime")]
+        items = shown_items(o)
         if items:
             cw = (W - 24) / len(items)
             for i, it in enumerate(items):
                 val, col = metric_value(it, s, g)
                 cx = 12 + i * cw
-                p.setFont(font(6.5, True))
-                p.setPen(qc(P["DIM"]))
-                p.drawText(QRectF(cx, y - 4, cw, 10), Qt.AlignmentFlag.AlignLeft, ITEM_LABELS.get(it, it))
+                if lk["labels"]:
+                    p.setFont(font(6.5, True))
+                    p.setPen(qc(P["DIM"]))
+                    p.drawText(QRectF(cx, y - 4, cw, 10), Qt.AlignmentFlag.AlignLeft, ITEM_LABELS.get(it, it))
                 p.setFont(font(9, True))
-                p.setPen(qc(col))
+                p.setPen(qc(tint(col, lk)))
                 p.drawText(QRectF(cx, y + 5, cw, 14), Qt.AlignmentFlag.AlignLeft, val)
 
 
@@ -576,7 +654,7 @@ def demo_state(kind, cfg):
     limit = 90
     fps = 88.5 + math.sin(t * 1.3) * 1.2
     low = 82
-    s = {"cpu_temp": 71, "gpu_temp": 64, "gpu_clk": 1750, "power": 74, "gpu_busy": 62, "cpu_load": 48,
+    s = {"cpu_temp": 71, "gpu_temp": 64, "gpu_clk": 1750, "cpu_mhz": 3490, "power": 74, "gpu_busy": 62, "cpu_load": 48,
          "fan": 1085, "ram": [7.9, 14.8], "vram": [410, 512]}
     thr = False
     if kind == "hot":
