@@ -1,6 +1,6 @@
 # Real GPU clock on 8-core BC-250s
 
-← [Documentation index](README.md)
+← [Project README](../README.md) · [Documentation index](README.md)
 
 ## The problem
 

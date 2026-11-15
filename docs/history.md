@@ -1,6 +1,6 @@
 # Session history
 
-← [Documentation index](README.md)
+← [Project README](../README.md) · [Documentation index](README.md)
 
 When `history.enabled` is on, `bc250d` records every game session in SQLite at
 `~/.local/share/bc250/history.db`.

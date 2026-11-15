@@ -1,6 +1,6 @@
 # Game profiles
 
-← [Documentation index](README.md)
+← [Project README](../README.md) · [Documentation index](README.md)
 
 A profile holds the settings for one game. `bc250d` applies it when the game starts presenting frames and
 restores the defaults when it stops.

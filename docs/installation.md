@@ -1,6 +1,6 @@
 # Installation
 
-← [Documentation index](README.md)
+← [Project README](../README.md) · [Documentation index](README.md)
 
 ## Requirements
 

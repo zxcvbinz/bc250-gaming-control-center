@@ -1,5 +1,7 @@
 # BC-250 Gaming Control Center — Documentation
 
+← [Back to the project README](../README.md)
+
 | Page | What's inside |
 |---|---|
 | [Installation](installation.md) | requirements, what the installer does, making games use the engine, uninstall |

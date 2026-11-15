@@ -1,6 +1,6 @@
 # Configuration reference
 
-← [Documentation index](README.md)
+← [Project README](../README.md) · [Documentation index](README.md)
 
 All settings live in `~/.config/bc250/config.json`. Every page of the app writes there, and every process
 (daemon, overlay) reloads it as soon as the file changes. Missing keys fall back to the defaults below, so

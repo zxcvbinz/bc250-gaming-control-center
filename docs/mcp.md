@@ -1,6 +1,6 @@
 # MCP server
 
-← [Documentation index](README.md)
+← [Project README](../README.md) · [Documentation index](README.md)
 
 `bc250-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio. It lets an AI
 assistant watch the machine while you play, compare settings with you and change them. The installer

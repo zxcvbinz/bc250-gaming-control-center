@@ -1,6 +1,6 @@
 # Troubleshooting
 
-← [Documentation index](README.md)
+← [Project README](../README.md) · [Documentation index](README.md)
 
 Start from the **Health** page (or `bc250ctl status`, or the MCP `health_check` tool). It checks the
 services, the engine, MangoHud, the governor, the GPU clock reading, the 8-core unlock, the fan,

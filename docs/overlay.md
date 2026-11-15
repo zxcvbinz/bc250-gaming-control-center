@@ -1,6 +1,6 @@
 # Overlay
 
-← [Documentation index](README.md)
+← [Project README](../README.md) · [Documentation index](README.md)
 
 The overlay is a separate process (`bc250-overlay`) drawing Wayland **layer-shell** surfaces on the
 *overlay* layer. They stay above fullscreen games, never take mouse input and never steal focus (except

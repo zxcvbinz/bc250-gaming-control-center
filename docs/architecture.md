@@ -1,6 +1,6 @@
 # Architecture
 
-← [Documentation index](README.md)
+← [Project README](../README.md) · [Documentation index](README.md)
 
 ```
  game process                         user session                              root
