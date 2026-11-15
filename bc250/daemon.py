@@ -32,6 +32,8 @@ class History:
                 cpu_temp REAL, gpu_temp REAL, gpu_clk REAL, gpu_max REAL, gpu_busy REAL,
                 cpu_load REAL, power REAL, fan INTEGER, ram REAL, throttling INTEGER);
             CREATE INDEX IF NOT EXISTS samples_session ON samples(session, t);
+            -- id di sessioni unite ad altre: chi chiede il vecchio id trova quella nuova
+            CREATE TABLE IF NOT EXISTS session_alias(old INTEGER PRIMARY KEY, new INTEGER);
         """)
         self.session = None
         self.current = None     # (nome, appid) del gioco della sessione aperta
@@ -53,10 +55,13 @@ class History:
             if profile:
                 self.db.execute("UPDATE sessions SET profile=? WHERE id=?", (profile, self.session))
         else:
-            cur = self.db.execute(
-                "INSERT INTO sessions(game, appid, api, profile, start, end) VALUES(?,?,?,?,?,?)",
-                (name, game["appid"], game["api"], profile, now, now))
-            self.session = cur.lastrowid
+            # id mai usati prima: quelli delle sessioni unite restano agli alias
+            nid = self.db.execute("SELECT MAX(m) + 1 FROM (SELECT IFNULL(MAX(id), 0) AS m FROM sessions "
+                                  "UNION ALL SELECT IFNULL(MAX(old), 0) FROM session_alias)").fetchone()[0]
+            self.db.execute(
+                "INSERT INTO sessions(id, game, appid, api, profile, start, end) VALUES(?,?,?,?,?,?,?)",
+                (nid, name, game["appid"], game["api"], profile, now, now))
+            self.session = nid
         self.db.commit()
         self.current = (name, appid)
         self.last_seen = now
@@ -88,6 +93,8 @@ class History:
                 end, profile = max(prev[5], r[5]), r[3] or prev[3]
                 self.db.execute("UPDATE sessions SET end=?, profile=? WHERE id=?", (end, profile, prev[0]))
                 self.db.execute("DELETE FROM sessions WHERE id=?", (r[0],))
+                self.db.execute("UPDATE session_alias SET new=? WHERE new=?", (prev[0], r[0]))
+                self.db.execute("INSERT OR REPLACE INTO session_alias VALUES(?,?)", (r[0], prev[0]))
                 prev = (prev[0], prev[1], prev[2], profile, prev[4], end)
                 merged += 1
             else:

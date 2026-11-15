@@ -63,6 +63,17 @@ QScrollBar::add-line, QScrollBar::sub-line {{ height:0; }}
 
 
 # ---------------------------------------------------------------- piccoli componenti
+def nav_icon(name):
+    """Icona del tema con la stessa immagine anche da selezionata/attiva (il tema la ricolora scura)."""
+    src = QIcon.fromTheme(name)
+    out = QIcon()
+    for size in (16, 22, 32):
+        pm = src.pixmap(size, size)
+        for mode in (QIcon.Mode.Normal, QIcon.Mode.Selected, QIcon.Mode.Active):
+            out.addPixmap(pm, mode)
+    return out
+
+
 def label(text="", size=10, color=None, bold=False, wrap=False):
     l = QLabel(text)
     f = QFont()
@@ -72,6 +83,7 @@ def label(text="", size=10, color=None, bold=False, wrap=False):
     l.setStyleSheet(f"color:{color or P['TEXT']}; font-size:{size}pt; font-weight:{'bold' if bold else 'normal'};")
     l.setWordWrap(wrap)
     l.setTextFormat(Qt.TextFormat.RichText)
+    l.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
     return l
 
 
@@ -88,6 +100,9 @@ class Card(QFrame):
             self.lay.addWidget(t)
         if subtitle:
             self.lay.addWidget(label(subtitle, 9, P["DIM"], wrap=True))
+        # dopo la costruzione: lo spazio in più va in fondo, così i testi restano in alto
+        # invece di distribuirsi in verticale quando la card è più alta del contenuto
+        QTimer.singleShot(0, lambda: self.lay.addStretch(1))
 
 
 def row(text, widget, hint=None):
@@ -97,7 +112,10 @@ def row(text, widget, hint=None):
     h.setContentsMargins(0, 2, 0, 2)
     v = QVBoxLayout()
     v.setSpacing(0)
-    v.addWidget(label(text, 10))
+    main = label(text, 10)
+    if not hint:  # riga singola: centrata rispetto al controllo a destra
+        main.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+    v.addWidget(main)
     if hint:
         v.addWidget(label(hint, 8.5, P["DIM"], wrap=True))
     h.addLayout(v, 1)
@@ -686,83 +704,19 @@ POSITIONS = [("In alto a sinistra", "top-left"), ("In alto al centro", "top-cent
              ("In basso al centro", "bottom-center"), ("In basso a destra", "bottom-right")]
 
 
-def draw_scene(p, r, game_hud=True):
-    """Scena di gioco finta, con un HUD di gioco tipico, per capire cosa copre l'overlay."""
-    p.save()
-    p.setClipRect(r, Qt.ClipOperation.IntersectClip)
-    sky = QLinearGradient(r.topLeft(), r.bottomLeft())
-    sky.setColorAt(0, QColor("#16233f"))
-    sky.setColorAt(0.62, QColor("#b8643a"))
-    sky.setColorAt(0.63, QColor("#1b231b"))
-    sky.setColorAt(1, QColor("#0b0e0b"))
-    p.fillRect(r, sky)
-    w, h = r.width(), r.height()
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QColor("#f2c27a"))
-    p.drawEllipse(QPointF(r.left() + w * 0.68, r.top() + h * 0.58), h * 0.07, h * 0.07)
-    mount = QPainterPath()
-    mount.moveTo(r.left(), r.top() + h * 0.63)
-    for fx, fy in ((0.08, 0.45), (0.18, 0.56), (0.3, 0.38), (0.45, 0.6), (0.55, 0.5), (0.7, 0.63),
-                   (0.82, 0.44), (0.93, 0.55), (1.0, 0.5)):
-        mount.lineTo(r.left() + w * fx, r.top() + h * fy)
-    mount.lineTo(r.right(), r.top() + h * 0.63)
-    mount.closeSubpath()
-    p.setBrush(QColor("#221a26"))
-    p.drawPath(mount)
-    if not game_hud:
-        p.restore()
-        return
-    # HUD del gioco: missioni, minimappa, barre vita, barra rapida, mirino
-    hud = QColor(255, 255, 255, 120)
-    u = h / 100
-    p.setBrush(QColor(255, 255, 255, 40))
-    p.setPen(QPen(hud, max(1.0, u * 0.3)))
-    p.drawEllipse(QPointF(r.right() - u * 13, r.top() + u * 13), u * 9, u * 9)
-    p.setPen(Qt.PenStyle.NoPen)
-    for i, ww in enumerate((26, 18, 21)):
-        p.setBrush(QColor(255, 255, 255, 70 if i else 110))
-        p.drawRoundedRect(QRectF(r.left() + u * 3, r.top() + u * (4 + i * 3.4), u * ww, u * 2), u, u)
-    for i, (col, ww) in enumerate((("#d9534f", 30), ("#5cb85c", 22))):
-        p.setBrush(QColor(255, 255, 255, 40))
-        p.drawRoundedRect(QRectF(r.left() + u * 3, r.bottom() - u * (9 - i * 3.5), u * 34, u * 2.2), u, u)
-        p.setBrush(QColor(col))
-        p.drawRoundedRect(QRectF(r.left() + u * 3, r.bottom() - u * (9 - i * 3.5), u * ww, u * 2.2), u, u)
-    for i in range(9):
-        p.setBrush(QColor(255, 255, 255, 50))
-        p.drawRoundedRect(QRectF(r.center().x() + u * (i - 4.5) * 6.4, r.bottom() - u * 9, u * 5.6, u * 5.6), u, u)
-    p.setPen(QPen(hud, max(1.0, u * 0.3)))
-    c = r.center()
-    p.drawLine(QPointF(c.x() - u * 2, c.y()), QPointF(c.x() + u * 2, c.y()))
-    p.drawLine(QPointF(c.x(), c.y() - u * 2), QPointF(c.x(), c.y() + u * 2))
-    p.restore()
-
-
-def hud_origin(pos, sw, sh, hw, hh, m):
-    x = m if pos.endswith("left") else sw - m - hw if pos.endswith("right") else (sw - hw) / 2
-    y = sh - m - hh if pos.startswith("bottom") else m
-    return x, y
-
-
 class HudPreview(QWidget):
-    """Anteprima dell'overlay: il tuo schermo in miniatura con l'overlay dove sarà davvero,
-    più l'overlay a grandezza reale. Clic su un punto dello schermo per spostarlo."""
-    MINI_H = 300
+    """Anteprima dell'overlay così come appare in gioco, a grandezza reale, sopra uno sfondo da gioco."""
+    PAD = 18
 
-    def __init__(self, on_pick):
+    def __init__(self):
         super().__init__()
-        self.on_pick = on_pick
         self.cfg = common.load_config()
         self.painter = HudPainter()
         self.scenario = "auto"
         self.live = {}
         self.st = {}
-        scr = QApplication.primaryScreen()
-        g = scr.geometry() if scr else None
-        self.sw, self.sh = (g.width(), g.height()) if g else (1920, 1080)
-        self.mini = QRectF()
         self.last_upd = 0.0
         self.last_paint = 0.0
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.tick)
         self.timer.start(33)
@@ -779,12 +733,9 @@ class HudPreview(QWidget):
     def set_live(self, st):
         self.live = st
 
-    def live_game(self):
-        st = self.live
-        return st if st.get("game") and time.time() - st.get("ts", 0) < 5 else None
-
     def refresh_state(self):
-        live = self.live_game() if self.scenario == "auto" else None
+        live = self.live if self.scenario == "auto" and self.live.get("game") and \
+            time.time() - self.live.get("ts", 0) < 5 else None
         self.st = live or demo_state("ok" if self.scenario == "auto" else self.scenario, self.cfg)
         self.painter.update(self.st, self.cfg)
 
@@ -795,89 +746,45 @@ class HudPreview(QWidget):
         if now - self.last_upd > 0.25:
             self.last_upd = now
             self.refresh_state()
-        moving = self.painter.step()
-        if moving or now - self.last_paint > 0.25:
+        if self.painter.step() or now - self.last_paint > 0.25:
             self.last_paint = now
+            self.fix_height()
             self.update()
 
-    def mini_rect(self):
-        mw = min(self.width(), self.MINI_H * self.sw / self.sh)
-        return QRectF(0, 0, mw, mw * self.sh / self.sw)
-
-    def strip_h(self):
-        return self.painter.size(self.st, self.cfg, expanded=True)[1] + 40
-
     def fix_height(self):
-        h = int(self.mini_rect().height() + 30 + 22 + self.strip_h())
-        if self.minimumHeight() != h:
-            self.setMinimumHeight(h)
-
-    def mousePressEvent(self, e):
-        r = self.mini_rect()
-        pt = e.position()
-        if not r.contains(pt):
-            return
-        fx = (pt.x() - r.left()) / r.width()
-        fy = (pt.y() - r.top()) / r.height()
-        col = "left" if fx < 1 / 3 else "right" if fx > 2 / 3 else "center"
-        self.on_pick(("bottom-" if fy > 0.5 else "top-") + col)
+        # altezza fissa sulla misura massima: la pagina non salta quando il cerchio si allarga
+        h = self.painter.size(self.st, self.cfg, expanded=True)[1] + 2 * self.PAD
+        if self.height() != h:
+            self.setFixedHeight(h)
 
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = QRectF(0.5, 0.5, self.width() - 1, self.height() - 1)
+        bg = QLinearGradient(r.topLeft(), r.bottomRight())
+        bg.setColorAt(0, QColor("#2a3550"))
+        bg.setColorAt(0.55, QColor("#7a4a3a"))
+        bg.setColorAt(1, QColor("#2b2230"))
+        p.setPen(QPen(QColor(P["BORDER"]), 1))
+        p.setBrush(bg)
+        p.drawRoundedRect(r, 10, 10)
         o = self.cfg["overlay"]
-        pos, m = o.get("position", "top-left"), int(o["margin"])
-        st, cfg = self.st, self.cfg
-        hw, hh = self.painter.size(st, cfg)
-        on = o["hud_visible"] and self.painter.visible(cfg)
-
-        # --- schermo in miniatura, proporzioni vere
-        r = self.mini_rect()
-        self.mini = r
-        draw_scene(p, r)
-        f = r.width() / self.sw
-        x, y = hud_origin(pos, self.sw, self.sh, hw, hh, m)
-        if on:
-            p.save()
-            p.translate(r.left() + x * f, r.top() + y * f)
-            p.scale(f, f)
-            self.painter.paint(p, st, cfg, hw, hh)
-            p.restore()
-            p.setPen(QPen(QColor(P["ACCENT"]), 1, Qt.PenStyle.DashLine))
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawRoundedRect(QRectF(r.left() + x * f - 3, r.top() + y * f - 3, hw * f + 6, hh * f + 6), 4, 4)
-        p.setPen(QPen(QColor(P["BORDER"]), 1))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6)
-        fnt = QFont()
-        fnt.setPointSizeF(8.5)
-        p.setFont(fnt)
-        p.setPen(QColor(P["MUTED"]))
-        pct = 100 * hw * hh / (self.sw * self.sh)
-        cap = (f"Il tuo schermo {self.sw}×{self.sh}  ·  overlay {hw}×{hh} px, {pct:.2f}% dello schermo"
-               if on else "Overlay nascosto in questo momento") + "  ·  clic sullo schermo per spostarlo"
-        p.drawText(QRectF(0, r.bottom() + 6, self.width(), 18), Qt.AlignmentFlag.AlignLeft, cap)
-
-        # --- grandezza reale
-        y0 = r.bottom() + 30
-        p.setPen(QColor(P["DIM"]))
-        p.drawText(QRectF(0, y0, self.width(), 16), Qt.AlignmentFlag.AlignLeft, "A GRANDEZZA REALE")
-        sr = QRectF(0, y0 + 20, self.width(), self.strip_h())
+        hw, hh = self.painter.size(self.st, self.cfg)
+        pos = o.get("position", "top-left")
+        x = r.right() - self.PAD - hw if pos.endswith("right") else \
+            r.left() + (r.width() - hw) / 2 if pos.endswith("center") else r.left() + self.PAD
+        y = r.bottom() - self.PAD - hh if pos.startswith("bottom") else r.top() + self.PAD
         p.save()
-        p.setClipRect(sr)
-        draw_scene(p, QRectF(sr.left(), sr.top() - sr.height() * 0.6, sr.width(), sr.height() * 2.4), False)
+        p.translate(x, y)
+        self.painter.paint(p, self.st, self.cfg, hw, hh)
         p.restore()
-        if on:
-            hx = sr.right() - 20 - hw if pos.endswith("right") else \
-                sr.left() + (sr.width() - hw) / 2 if pos.endswith("center") else sr.left() + 20
-            p.save()
-            p.setClipRect(sr)
-            p.translate(hx, sr.top() + (sr.height() - hh) / 2)
-            self.painter.paint(p, st, cfg, hw, hh)
-            p.restore()
-        p.setPen(QPen(QColor(P["BORDER"]), 1))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawRoundedRect(sr.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6)
+        if not o["hud_visible"]:
+            f = QFont()
+            f.setPointSizeF(8.5)
+            p.setFont(f)
+            p.setPen(QColor(P["TEXT"]))
+            p.drawText(r.adjusted(14, 8, -14, -8), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom,
+                       "Overlay spento: in gioco non si vede (Shift+F3 per accenderlo)")
         p.end()
 
 
@@ -898,7 +805,7 @@ class OverlayPage:
         self.scen.activated.connect(self.set_scenario)
         pc.lay.addWidget(row("Simula", self.scen, "Le demo mostrano come reagisce il cerchio, con gli stessi "
                              "tempi del gioco (si allarga dopo 1-2 s, si richiude dopo la tenuta)."))
-        self.preview = HudPreview(self.pick_position)
+        self.preview = HudPreview()
         pc.lay.addWidget(self.preview)
         lay.addWidget(pc)
 
@@ -1019,12 +926,6 @@ class OverlayPage:
     def set_scenario(self, *_):
         self.preview.scenario = self.scen.currentData()
         self.preview.refresh_state()
-
-    def pick_position(self, pos):
-        i = self.pos.findData(pos)
-        if i >= 0:
-            self.pos.setCurrentIndex(i)
-            self.save()
 
     def save(self, *_):
         if self.loading:
@@ -1396,7 +1297,7 @@ class Main(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("BC-250 Control Center")
-        self.setWindowIcon(QIcon.fromTheme("utilities-system-monitor"))
+        self.setWindowIcon(QIcon(os.path.join(ASSETS, "icon.svg")))
         self.setStyleSheet(STYLE)
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -1433,7 +1334,7 @@ class Main(QWidget):
 
         self.pages = []
         for name, icon, cls in self.PAGES:
-            it = QListWidgetItem(QIcon.fromTheme(icon), name)
+            it = QListWidgetItem(nav_icon(icon), name)
             self.nav.addItem(it)
             pg = cls(self)
             self.pages.append(pg)

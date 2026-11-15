@@ -1,38 +1,113 @@
-# BC-250 Control Center
+<p align="center">
+  <img src="bc250/assets/icon.svg" width="128" alt="BC-250 Control Center icon">
+</p>
 
-Centro di controllo per la AMD BC-250: monitor, motore FPS al posto di MangoHud,
-overlay in gioco, profili per gioco, VRR, salute del sistema, storico e server MCP.
+<h1 align="center">BC-250 Gaming Control Center</h1>
 
-## Pezzi
-| Componente | Cosa fa |
+<p align="center">
+  <b>FPS limiter, in-game overlay, per-game profiles and session history for the AMD BC-250 on Linux.</b><br>
+  <sub>Built for Bazzite / KDE Plasma (Wayland). No MangoHud needed.</sub>
+</p>
+
+<p align="center">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Linux%20%C2%B7%20KDE%20Wayland-1c232c?style=flat-square">
+  <img alt="Hardware" src="https://img.shields.io/badge/hardware-AMD%20BC--250-4fa3ff?style=flat-square">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-3fb950?style=flat-square">
+  <img alt="Vulkan + OpenGL" src="https://img.shields.io/badge/engine-Vulkan%20%2B%20OpenGL-a371f7?style=flat-square">
+</p>
+
+---
+
+The AMD BC-250 is a crypto-mining board built around a cut-down PS5 APU (Cyan Skillfish: 6–8 Zen 2 cores,
+24 RDNA1 CUs). It makes a great cheap gaming box, but it runs hot, often has a single fan and needs some
+babysitting. This app keeps an eye on it while you play and lets you tune each game without leaving it.
+
+<p align="center">
+  <img src="docs/dashboard.png" width="860" alt="Dashboard">
+</p>
+
+## Features
+
+- **Own FPS engine**: an implicit Vulkan layer plus an `LD_PRELOAD` OpenGL shim that count frames and cap FPS.
+  You can change the limit live (no game restart) with **Shift+F1** or from the app.
+- **Smart bubble overlay**: a small 56 px circle with your FPS. It **expands only when something needs
+  attention**: CPU/GPU too hot, FPS below target, stutter (low 1% lows), GPU clock throttling, RAM almost full
+  or the fan stopped. When everything is fine it can stay visible, fade out or hide completely.
+  A compact bar and a full panel are also available.
+- **In-game details panel** (**Shift+F2**): live graphs, system info and an editable game profile, driven
+  with the arrow keys.
+- **Per-game profiles**: FPS limit, max GPU clock, VRR, heat guard (drops 10 FPS every 20 s above a CPU
+  temperature, then recovers), and overlay visibility, position and style.
+- **VRR only in games**: FreeSync turns on when a game whose profile asks for it starts, and goes back off on
+  the desktop.
+- **Session history** grouped by game: FPS, 1% lows, temperatures, clocks and power for every session.
+  Alt+tab or long loading screens do not split a session.
+- **Health checks and alerts**: desktop notifications and on-screen toasts for temperature, fan and RAM.
+- **MCP server**: lets an AI assistant (e.g. Claude Code) read live stats and history, mark moments
+  during a test and change FPS limits, GPU clock and profiles. Useful for finding the best settings together.
+
+<p align="center">
+  <img src="docs/bubble.png" width="620" alt="Bubble overlay: idle, CPU hot, GPU throttling"><br>
+  <sub>The bubble overlay: all good · CPU getting hot · GPU hot and clock throttled</sub>
+</p>
+
+<p align="center">
+  <img src="docs/overlay.png" width="860" alt="Overlay settings with live preview">
+</p>
+
+## How it works
+
+| Component | What it does |
 |---|---|
-| `layer/` (C) | `libbc250_vk.so` layer Vulkan implicito + `libbc250_gl.so` (LD_PRELOAD OpenGL). Conta i frame e applica il limite FPS, cambiabile a caldo. |
-| `bc250d` | Servizio utente: sensori, giochi attivi, profili, storico SQLite, avvisi. Scrive lo stato in `/dev/shm/bc250-$UID/state.json`. |
-| `bc250-overlay` | HUD + pannello dettagli + avvisi a schermo (Wayland layer-shell, sopra anche ai giochi a schermo intero). Tre stili: **cerchio intelligente** (solo FPS, si allarga quando CPU/GPU scaldano, gli FPS calano, ci sono scatti, taglio clock, RAM piena o ventola ferma), barra compatta, completo. Il disegno è in `hudpaint.py`, condiviso con l'anteprima della GUI. |
-| `bc250-control` | GUI: Panoramica, Giochi e FPS, Profili, Overlay (con anteprima sul tuo schermo e demo), Display (VRR), Salute, Storico (raggruppato per gioco), Avvisi. |
-| `bc250ctl` | Comandi rapidi: `toggle-limit`, `toggle-panel`, `toggle-hud`, `limit <n|off>`, `status`. |
-| `bc250-mcp` | Server MCP per Claude Code (stato live, storico, segni nei test, limite FPS, clock GPU, profili). |
+| `layer/` (C) | `libbc250_vk.so` (implicit Vulkan layer) and `libbc250_gl.so` (OpenGL `LD_PRELOAD`). They count frames and apply the FPS cap, sharing a small memory-mapped file with the daemon. |
+| `bc250d` | User service: sensors, running game, profiles, SQLite history, alerts. Writes the live state to `/dev/shm/bc250-$UID/state.json`. |
+| `bc250-overlay` | HUD, details panel and toasts as Wayland layer-shell surfaces, so they stay on top of fullscreen games. |
+| `bc250-control` | The desktop app (PyQt6). |
+| `bc250ctl` | Quick commands: `toggle-limit`, `toggle-panel`, `toggle-hud`, `limit <n\|off>`, `status`. |
+| `bc250-mcp` | MCP server (stdio) for AI assistants. |
 
-## Storico
-Una sessione resta aperta se il gioco smette di disegnare per poco (alt+tab, caricamenti): se lo stesso
-gioco torna entro `history.merge_gap_s` (300 s) continua la stessa sessione. All'avvio il servizio
-unisce anche le sessioni già spezzate.
+The GPU clock range is controlled through the D-Bus interface of
+[cyan-skillfish-governor](https://github.com/filippor/cyan-skillfish-governor).
 
-## Tasti
-- **Shift+F1** limite FPS on/off
-- **Shift+F2** pannello dettagli
-- **Shift+F3** overlay on/off
+## Install
 
-## File
-- Configurazione: `~/.config/bc250/config.json`
-- Storico: `~/.local/share/bc250/history.db`
-- Motore: `~/.local/lib/bc250/`, manifest `~/.local/share/vulkan/implicit_layer.d/bc250_frame.json`
-- Giochi Steam OpenGL nativi: opzioni di avvio `bc250-gl %command%`
-- Disattivare il motore per un singolo gioco: `DISABLE_BC250_LAYER=1 %command%`
+Requirements: KDE Plasma 6 on Wayland (LayerShellQt), Python 3 with PyQt6 and PyGObject, `gcc` and `make`.
+For GPU clock control, [cyan-skillfish-governor](https://github.com/filippor/cyan-skillfish-governor) with
+D-Bus enabled.
 
-## Installare / aggiornare / rimuovere
 ```sh
-cd ~/bc250-tools/bc250-control
-python3 -m bc250.install            # installa o aggiorna
-python3 -m bc250.install --remove   # rimuove tutto (MangoHud torna attivo al prossimo accesso)
+git clone https://github.com/zxcvbinz/bc250-gaming-control-center.git
+cd bc250-gaming-control-center
+python3 -m bc250.install            # build the engine, install services, shortcuts and launchers
+python3 -m bc250.install --remove   # uninstall everything
 ```
+
+- Native OpenGL Steam games: set the launch options to `bc250-gl %command%`.
+- Turn the engine off for one game: `DISABLE_BC250_LAYER=1 %command%`.
+
+## Shortcuts
+
+| Keys | Action |
+|---|---|
+| **Shift+F1** | FPS limit on/off |
+| **Shift+F2** | Details panel (arrow keys edit the game profile, Esc closes) |
+| **Shift+F3** | Overlay on/off |
+
+You can rebind them in System Settings → Shortcuts → "BC-250".
+
+## Files
+
+| Path | Content |
+|---|---|
+| `~/.config/bc250/config.json` | Settings and profiles |
+| `~/.local/share/bc250/history.db` | Session history (SQLite) |
+| `~/.local/lib/bc250/` | FPS engine libraries |
+| `~/.local/share/vulkan/implicit_layer.d/bc250_frame.json` | Vulkan layer manifest |
+
+A session stays open while a game is briefly gone (alt+tab, loading). If the same game comes back within
+`history.merge_gap_s` (300 s), the session continues.
+
+## Notes
+
+- The app UI is in Italian for now.
+- Tested on a BC-250 running Bazzite (Fedora 43), kernel 6.17, Mesa 26, with the 8-core unlock.

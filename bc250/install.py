@@ -114,7 +114,7 @@ WantedBy=graphical-session.target
 
 
 def install_desktop():
-    icon = "utilities-system-monitor"
+    icon = os.path.join(ROOT, "bc250", "assets", "icon.svg")
     write(os.path.join(APPS, "bc250-control.desktop"), f"""[Desktop Entry]
 Type=Application
 Name=BC-250 Control Center

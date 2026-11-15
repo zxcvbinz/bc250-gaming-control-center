@@ -20,6 +20,7 @@ def db():
     con = sqlite3.connect(common.DB_PATH, timeout=5)
     con.row_factory = sqlite3.Row
     con.execute("CREATE TABLE IF NOT EXISTS marks(session INTEGER, t REAL, note TEXT)")
+    con.execute("CREATE TABLE IF NOT EXISTS session_alias(old INTEGER PRIMARY KEY, new INTEGER)")
     return con
 
 
@@ -100,7 +101,9 @@ def t_list_sessions(a):
     for s in con.execute("SELECT * FROM sessions ORDER BY start DESC LIMIT ?", (int(a.get("limit", 15)),)):
         rows = con.execute("SELECT * FROM samples WHERE session=? ORDER BY t", (s["id"],)).fetchall()
         sm = summarize(rows)
+        merged = [r[0] for r in con.execute("SELECT old FROM session_alias WHERE new=?", (s["id"],))]
         out.append({"id": s["id"], "game": s["game"], "profile": s["profile"],
+                    **({"merged_ids": merged} if merged else {}),
                     "start": time.strftime("%Y-%m-%d %H:%M", time.localtime(s["start"])),
                     "minutes": r1((s["end"] - s["start"]) / 60),
                     "fps_avg": sm.get("fps_avg"), "fps_1pct_low_avg": sm.get("fps_1pct_low_avg"),
@@ -110,9 +113,32 @@ def t_list_sessions(a):
     return out
 
 
+def resolve(con, sid):
+    """Id di sessione, seguendo gli alias delle sessioni unite."""
+    try:
+        r = con.execute("SELECT new FROM session_alias WHERE old=?", (sid,)).fetchone()
+    except sqlite3.Error:
+        r = None
+    return r[0] if r else sid
+
+
+def parts(rows, gap=20):
+    """Tratti di gioco continui: si separano dove il gioco ha smesso di disegnare (alt+tab, caricamenti)."""
+    out, cur = [], []
+    for r in rows:
+        if cur and r["t"] - cur[-1]["t"] > gap:
+            out.append(cur)
+            cur = []
+        cur.append(r)
+    if cur:
+        out.append(cur)
+    return out
+
+
 def t_get_session(a):
     con = db()
-    sid = int(a["id"])
+    asked = int(a["id"])
+    sid = resolve(con, asked)
     s = con.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()
     if not s:
         raise ValueError("sessione non trovata")
@@ -127,9 +153,19 @@ def t_get_session(a):
         seg = [r for r in rows if bounds[i] <= r["t"] < bounds[i + 1]]
         if seg:
             segments.append({"from_mark": labels[i], "summary": summarize(seg)})
-    return {"id": sid, "game": s["game"], "profile": s["profile"], "api": s["api"],
-            "summary": summarize(rows), "marks": marks, "segments": segments,
-            "timeline": downsample(rows, int(a.get("points", 60)))}
+    merged = [r[0] for r in con.execute("SELECT old FROM session_alias WHERE new=? ORDER BY old", (sid,))]
+    pp = [{"start": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(p[0]["t"])),
+           "minutes": r1((p[-1]["t"] - p[0]["t"]) / 60), "summary": summarize(p)} for p in parts(rows)]
+    out = {"id": sid, "game": s["game"], "profile": s["profile"], "api": s["api"],
+           "start": time.strftime("%Y-%m-%d %H:%M", time.localtime(s["start"])),
+           "minutes": r1((s["end"] - s["start"]) / 60)}
+    if asked != sid:
+        out["note"] = f"la sessione {asked} è stata unita alla {sid} (stesso gioco, ripreso entro pochi minuti)"
+    if merged:
+        out["merged_ids"] = merged
+    out.update({"summary": summarize(rows), "parts": pp, "marks": marks, "segments": segments,
+            "timeline": downsample(rows, int(a.get("points", 60)))})
+    return out
 
 
 def t_mark(a):
@@ -204,7 +240,7 @@ TOOLS = {
                     "points": {"type": "integer", "description": "punti della timeline (default 30)"}}),
     "list_sessions": (t_list_sessions, "Elenco delle ultime partite registrate con medie e massimi.",
                       {"limit": {"type": "integer"}}),
-    "get_session": (t_get_session, "Dettaglio di una partita: riassunto, segni, confronto per tratti tra i segni, timeline.",
+    "get_session": (t_get_session, "Dettaglio di una partita: riassunto, parti continue (separate da alt+tab/pause), segni, confronto per tratti tra i segni, timeline. Accetta anche id di sessioni poi unite.",
                     {"id": {"type": "integer"}, "points": {"type": "integer"}}, ["id"]),
     "mark": (t_mark, "Segna un momento nella partita in corso (es. 'ombre basse', 'limite 75'), per confrontare i tratti.",
              {"note": {"type": "string"}}, ["note"]),
