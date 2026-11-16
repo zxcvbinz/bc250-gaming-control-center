@@ -1040,7 +1040,13 @@ class ProfilesPage:
             if cm.lower() != m.lower() and cm.lower() not in taken:
                 self.match.addItem(f"{lab}  ({cm})", cm)
         self.match.setCurrentIndex(0)
+        inh = self.inherited()
         for key, cb in self.fields.items():
+            if key in inh:   # la voce «globale» dice anche quale valore usa davvero
+                j = cb.findData(None)
+                if j >= 0:
+                    meta = next(f for f in common.PROFILE_FIELDS if f[0] == key)
+                    cb.setItemText(j, f"{meta[3](None, {})}  ({inh[key]})")
             cur = p.get(key, common.FIELD_DEFAULT[key])
             i = cb.findData(cur)
             if i < 0:   # valore fuori elenco (scritto a mano o via MCP): lo mostro com'è
@@ -1048,6 +1054,21 @@ class ProfilesPage:
                 i = cb.count() - 1
             cb.setCurrentIndex(i)
         self.loading = False
+
+    @staticmethod
+    def inherited():
+        """Valori che un campo «globale» usa davvero, per mostrarli accanto alla voce."""
+        c = common.load_config()
+        e, o = c["engine"], c["overlay"]
+        lim = e["fps_limit"] if e["limit_enabled"] else 0
+        cpu = (c.get("cpu") or {}).get("max_mhz")
+        return {
+            "fps_limit": T("{v} FPS", v=lim) if lim else T("nessuno"),
+            "gpu_max": f"{c['gpu_default']['min']}–{c['gpu_default']['max']} MHz",
+            "cpu_max": f"{cpu} MHz" if cpu else T("nessun limite"),
+            "hud_position": T(common.POS_NAMES.get(o.get("position"), "")),
+            "hud_style": T(common.STYLE_NAMES.get(o.get("style"), "")),
+        }
 
     # ------------------------------------------------------------ modifiche (salvate subito)
     def update_profile(self, fn, toast=True):
