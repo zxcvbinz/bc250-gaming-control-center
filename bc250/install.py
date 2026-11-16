@@ -245,6 +245,43 @@ def install_metrics_fix():
     sudo(["systemctl", "restart", "bc250-metricsfix.service"])
 
 
+CPUFREQ_UNIT = "/etc/systemd/system/bc250-cpufreq.service"
+
+
+def install_cpufreq_perm():
+    """Servizio root all'avvio: il gruppo dell'utente può scrivere il tetto di frequenza CPU (solo con cpufreq)."""
+    if not common.cpufreq_info():
+        return False  # serve acpi-cpufreq (fix ACPI della community, vedi docs/cpu.md)
+    import grp
+    group = grp.getgrgid(os.getgid()).gr_name
+    unit = f"""[Unit]
+Description=BC-250: CPU frequency cap writable by group {group} (scaling_max_freq only)
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/python3 -I {SYS_LIB}/cpufreqperm.py --group {group}
+
+[Install]
+WantedBy=multi-user.target
+"""
+    sudo(["install", "-D", "-m", "0644", "-o", "root", "-g", "root",
+          os.path.join(ROOT, "bc250", "cpufreqperm.py"), f"{SYS_LIB}/cpufreqperm.py"])
+    sudo(["tee", CPUFREQ_UNIT], input=unit)
+    sudo(["systemctl", "daemon-reload"])
+    sudo(["systemctl", "enable", "bc250-cpufreq.service"])
+    sudo(["systemctl", "restart", "bc250-cpufreq.service"])
+
+
+def remove_cpufreq_perm():
+    try:
+        sudo(["systemctl", "disable", "--now", "bc250-cpufreq.service"])
+        sudo(["rm", "-f", CPUFREQ_UNIT, f"{SYS_LIB}/cpufreqperm.py"])
+        sudo(["systemctl", "daemon-reload"])
+    except RuntimeError:
+        pass
+
+
 def remove_metrics_fix():
     try:
         sudo(["systemctl", "disable", "--now", "bc250-metricsfix.service"])
@@ -287,6 +324,7 @@ def install():
         ("Motore OpenGL nelle app Flatpak note (se installate)", install_flatpak_gl),
         ("Server MCP per Claude Code", register_mcp),
         ("Clock GPU reale per MangoHud/Steam/LACT (8 core, sudo)", install_metrics_fix),
+        ("Limite frequenza CPU dai profili (solo con cpufreq, sudo)", install_cpufreq_perm),
     ]
     if "--no-launcher" not in sys.argv:
         steps.append(("Lanciatore bc250-run in tutti i giochi (upscaling FSR dai profili)", install_launchers))
@@ -320,6 +358,7 @@ def remove():
     for a in FLATPAK_GL_APPS:
         flatpak_gl(a, False)
     remove_metrics_fix()
+    remove_cpufreq_perm()
     try:
         from . import launchers
         launchers.apply_all(False)

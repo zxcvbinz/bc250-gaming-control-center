@@ -11,7 +11,7 @@
 | Python 3.11+ with **PyQt6** and **PyGObject** | GUI, overlay, D-Bus | `python3-pyqt6`, `python3-gobject` (preinstalled on Bazzite) |
 | `gcc` and `make` | to build the FPS engine (two tiny C libraries) | in a toolbox/distrobox, or layered |
 | [cyan-skillfish-governor](https://github.com/filippor/cyan-skillfish-governor) (`smu` branch) with `[dbus] enabled = true` | GPU clock range control, live clock reading | optional but strongly recommended |
-| `sudo` | only for the 8-core GPU clock fix (`bc250-metricsfix`) | optional |
+| `sudo` | only for the 8-core GPU clock fix (`bc250-metricsfix`) and the CPU frequency cap (`bc250-cpufreq`) | optional |
 
 Everything else (the daemon, overlay, GUI and MCP server) runs as your user. No root needed.
 
@@ -37,6 +37,7 @@ The installer is idempotent: run it again after `git pull` to update. Each step 
 | OpenGL Flatpak apps | adds the GL engine to the Flatpak apps listed in `FLATPAK_GL_APPS` |
 | MCP server | registers `bc250-mcp` in Claude Code (`claude mcp add -s user bc250 …`) if the `claude` CLI exists |
 | Real GPU clock (8 core) | installs `bc250-metricsfix.service` with `sudo` (asks for the password in a terminal). Skipped if the governor is missing |
+| CPU frequency cap | installs `bc250-cpufreq.service` with `sudo`: at boot it lets your group write `scaling_max_freq` (nothing else). Skipped without cpufreq ([CPU](cpu.md)) |
 | Launcher in every game | puts `bc250-run` into every Steam game's launch options (closing and reopening Steam), Lutris command prefixes and Heroic wrappers, and keeps new games covered. Skip with `--no-launcher` ([details](graphics.md#automatic-mode-in-detail)) |
 
 > The launchers point at the cloned folder: keep the repository where you cloned it, or run the installer
@@ -68,5 +69,5 @@ python3 -m bc250.install --remove
 ```
 
 This stops and removes the services, shortcuts, launchers, the layer manifest, the Flatpak overrides,
-`bc250-metricsfix` and `bc250-run` from every game's launch options. MangoHud comes back from the next login. Your settings (`~/.config/bc250`) and history
+`bc250-metricsfix`, `bc250-cpufreq` and `bc250-run` from every game's launch options. MangoHud comes back from the next login. Your settings (`~/.config/bc250`) and history
 (`~/.local/share/bc250`) are kept. Delete them by hand if you want a clean slate.

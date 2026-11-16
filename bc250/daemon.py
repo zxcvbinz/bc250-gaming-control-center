@@ -222,6 +222,21 @@ class Daemon:
     def apply_control(self):
         e = self.cfg["engine"]
         write_control(e["fps_limit"], e["limit_enabled"], e["enabled"])
+        self.apply_cpu()
+
+    def apply_cpu(self):
+        """Tetto di frequenza CPU: quello del profilo del gioco (0 = nessun limite), se no quello globale."""
+        prof = (self.profile or {}).get("cpu_max")
+        want = prof if prof is not None else (self.cfg.get("cpu") or {}).get("max_mhz")
+        info = common.cpufreq_info()
+        if not info:
+            return
+        target = info["hw_max"] if not want else min(int(want), info["hw_max"])
+        if (info["max"] != target or not info["uniform"]) and not common.set_cpu_max(target):
+            if getattr(self, "_cpu_warned", None) != target:
+                self._cpu_warned = target
+                print(f"cpufreq: non posso impostare {target} MHz (manca il servizio bc250-cpufreq?)",
+                      file=sys.stderr, flush=True)
 
     def reload_if_changed(self):
         m = self._mtime()
@@ -241,6 +256,7 @@ class Daemon:
             governor_set(self.profile.get("gpu_min") or gd["min"], self.profile["gpu_max"])
         elif prev_profile and prev_profile.get("gpu_max"):
             governor_set(gd["min"], gd["max"])
+        self.apply_cpu()
         if game:
             self.apply_limit(game)
 
@@ -475,6 +491,8 @@ class Daemon:
     def tick(self):
         self.n += 1
         self.reload_if_changed()
+        if self.n % 10 == 0:
+            self.apply_cpu()   # rimette il tetto CPU se qualcos'altro l'ha cambiato
         s = self.sensors.read(with_gpu_busy=(self.n % 2 == 0))
         if s.get("gpu_busy") is None:
             s["gpu_busy"] = getattr(self, "last_busy", None)
@@ -522,6 +540,7 @@ class Daemon:
             "engine": {"enabled": e["enabled"], "fps_limit": e["fps_limit"],
                        "limit_enabled": e["limit_enabled"]},
             "governor": {"min": self.gov[0], "max": self.gov[1], **self.gov_cfg},
+            "cpufreq": common.cpufreq_info(),
             "throttling": throttling, "alerts": self.alerts,
             "session": self.hist.session,
         }
@@ -542,6 +561,9 @@ class Daemon:
         gd = self.cfg["gpu_default"]
         if self.profile and self.profile.get("gpu_max"):
             governor_set(gd["min"], gd["max"])
+        if self.profile and self.profile.get("cpu_max") is not None:
+            self.profile = None
+            self.apply_cpu()   # torna al limite globale
 
 
 def main():

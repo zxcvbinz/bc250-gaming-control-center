@@ -89,7 +89,7 @@ def t_get_status(_):
                      "cpu_mhz", "nvme_temp", "cores", "threads")},
         "ram_gib": [r1(x) for x in s.get("ram") or []],
         "vram_mib": [r1(x, 0) for x in s.get("vram") or []],
-        "governor": st.get("governor"), "throttling": st.get("throttling"),
+        "governor": st.get("governor"), "cpufreq": st.get("cpufreq"), "throttling": st.get("throttling"),
         "alerts": st.get("alerts"), "session_id": st.get("session"),
     }
 
@@ -215,13 +215,29 @@ def t_set_gpu_clock(a):
             "note": "Temporaneo: un profilo o il cambio gioco lo reimposta."}
 
 
+def t_set_cpu_max(a):
+    """Tetto di frequenza CPU in diretta (MHz; 0 = nessun limite). Temporaneo: il servizio lo riporta al
+    valore del profilo o globale al prossimo cambio gioco o di configurazione, salvo save=true."""
+    info = common.cpufreq_info()
+    if not info:
+        return {"ok": False, "error": "cpufreq non disponibile (serve il fix ACPI, vedi docs/cpu.md)"}
+    mhz = int(a.get("max") or 0)
+    if a.get("save"):
+        common.update_config(lambda c: c.setdefault("cpu", {}).update(max_mhz=mhz or None))
+    ok = common.set_cpu_max(mhz)
+    if ok:
+        common.overlay_send(f"toast:CPU max: {mhz or info['hw_max']} MHz")
+    return {"ok": ok, "cpufreq": common.cpufreq_info(),
+            "note": None if ok else "Permesso negato: installa il servizio bc250-cpufreq (install.py)."}
+
+
 def t_profiles(_):
     return common.load_config()["profiles"]
 
 
 def t_save_profile(a):
     prof = {k: a[k] for k in ("name", "match", "fps_limit", "gpu_max", "gpu_min", "vrr", "heat_guard",
-                              "hud", "hud_position", "hud_style", "upscale", "opengl", "notes") if k in a}
+                              "hud", "hud_position", "hud_style", "upscale", "opengl", "cpu_max", "notes") if k in a}
 
     def fn(c):
         for i, p in enumerate(c["profiles"]):
@@ -315,7 +331,7 @@ def t_health(_):
 
 def t_config(_):
     c = common.load_config()
-    return {k: c[k] for k in ("engine", "alerts", "gpu_default", "overlay")}
+    return {k: c[k] for k in ("engine", "alerts", "gpu_default", "cpu", "overlay")}
 
 
 TOOLS = {
@@ -333,6 +349,9 @@ TOOLS = {
                       {"limit": {"type": "integer"}, "profile": {"type": "string"}}, ["limit"]),
     "set_gpu_clock": (t_set_gpu_clock, "Cambia in diretta il range clock GPU del governor (MHz, 500-2000).",
                       {"max": {"type": "integer"}, "min": {"type": "integer"}}),
+    "set_cpu_max": (t_set_cpu_max, "Cambia in diretta il tetto di frequenza CPU (MHz tra quelli in cpufreq.steps di "
+                    "get_status; 0 = nessun limite). save=true lo salva come limite globale.",
+                    {"max": {"type": "integer"}, "save": {"type": "boolean"}}, ["max"]),
     "list_profiles": (t_profiles, "Profili per gioco (match nome processo o appid:<id>, fps_limit, gpu_max).", {}),
     "save_profile": (t_save_profile, "Crea o aggiorna un profilo per gioco.",
                      {"name": {"type": "string"}, "match": {"type": "string"},
@@ -344,6 +363,7 @@ TOOLS = {
                       "hud_style": {"type": ["string", "null"], "description": "bubble, ring, compact, full o null (globale)"},
                       "upscale": {"type": ["string", "null"], "description": "gamescope+FSR1 dal prossimo avvio (serve bc250-run %command%): q77, q67, q59, q50 o null"},
                       "opengl": {"type": "boolean", "description": "carica il motore FPS OpenGL tramite bc250-run"},
+                      "cpu_max": {"type": ["integer", "null"], "description": "tetto frequenza CPU in MHz in questo gioco (0 = nessun limite, null = globale)"},
                       "notes": {"type": "string"}}, ["name"]),
     "get_game_settings": (t_get_game_settings, "Impostazioni grafiche del gioco (in corso o per nome): motore, "
                           "file, valori principali, impostazioni volute dal profilo, storico delle modifiche "
@@ -355,7 +375,7 @@ TOOLS = {
                           {"game": {"type": "string"}, "settings": {"type": "object"},
                            "save_to_profile": {"type": "boolean"}}, ["game", "settings"]),
     "health_check": (t_health, "Controllo salute della BC-250 (servizi, governor, core, ventola, swap, VRR...).", {}),
-    "get_config": (t_config, "Configurazione attuale (motore, avvisi, clock GPU di default, overlay).", {}),
+    "get_config": (t_config, "Configurazione attuale (motore, avvisi, clock GPU di default, frequenza CPU, overlay).", {}),
 }
 
 

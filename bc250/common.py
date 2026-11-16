@@ -39,7 +39,7 @@ DEFAULTS = {
         "graph": True,
         "style": "bubble",        # bubble (cerchio intelligente), ring (anello completo), compact, full
         # aspetto dei valori (anello, barra, completo): vedi hudpaint.LOOK_DEFAULT
-        "look": {"labels": True, "border": False, "limit_badge": True, "colors": "status", "accent": "#4fa3ff"},
+        "look": {"labels": True, "border": False, "limit_badge": True, "colors": "status", "accent": "#ffb000"},
         # cerchio: mostra solo un valore e si allarga quando qualcosa richiede attenzione
         "bubble": {
             "center": "fps",      # fps, cpu_temp, gpu_temp, power
@@ -66,6 +66,9 @@ DEFAULTS = {
     # upscale_*: usati da bc250-run per i profili con upscaling (gamescope)
     "display": {"vrr_games_only": True, "vrr_off_delay_s": 8, "upscale_filter": "fsr", "upscale_sharpness": 3},
     "gpu_default": {"min": 1000, "max": 1750},
+    # frequenza massima della CPU in MHz (None = nessun limite). Serve acpi-cpufreq (fix ACPI della
+    # community, vedi docs/cpu.md) e il servizio bc250-cpufreq che dà il permesso di scrittura.
+    "cpu": {"max_mhz": None},
     # mode per i giochi installati dopo: ask = notifica e chiedi se collegarli (bc250-run nelle opzioni
     # di avvio), auto = collega da solo, off = niente
     "launcher": {"auto": False, "mode": "ask"},
@@ -99,16 +102,19 @@ PROFILE_FIELDS = [
     ("hud_position", "Posizione overlay", list(POS_NAMES), lambda v, g: _T(POS_NAMES.get(v, str(v)))),
     ("hud_style", "Stile overlay", list(STYLE_NAMES), lambda v, g: _T(STYLE_NAMES.get(v, str(v)))),
     ("upscale", "Upscaling FSR", list(UPSCALE_NAMES), lambda v, g: _T(UPSCALE_NAMES.get(v, str(v)))),
+    ("cpu_max", "Frequenza CPU max", [None, 0, 3200, 2550, 2325, 1960, 1820, 1600],
+     lambda v, g: _T("globale") if v is None else (_T("nessun limite") if v == 0 else f"{v} MHz")),
 ]
 FIELD_DEFAULT = {"fps_limit": None, "gpu_max": None, "vrr": False, "heat_guard": None, "hud": True,
                  "hud_position": None, "hud_style": None,
-                 "upscale": None}
+                 "upscale": None, "cpu_max": None}
 
+# stile «Cockpit»: nero caldo, ambra come accento, ciano per i clock
 PALETTE = {
-    "BG": "#0e1116", "SIDEBAR": "#12161c", "CARD": "#161b22", "CARD2": "#1c232c",
-    "BORDER": "#232b35", "TEXT": "#e6edf3", "MUTED": "#8b98a5", "DIM": "#5c6773",
-    "ACCENT": "#4fa3ff", "GOOD": "#3fb950", "WARN": "#d29922", "BAD": "#f85149",
-    "OFF": "#262e38", "PURPLE": "#a371f7",
+    "BG": "#0c0d0a", "SIDEBAR": "#0f100c", "CARD": "#12130f", "CARD2": "#1a1a14",
+    "BORDER": "#2c2c25", "TEXT": "#e8e4d8", "MUTED": "#a39f8f", "DIM": "#7a7668",
+    "ACCENT": "#ffb000", "GOOD": "#7fd88f", "WARN": "#ff8a3d", "BAD": "#ff5a4a",
+    "OFF": "#22221c", "PURPLE": "#b48cff", "CYAN": "#5ad1e6", "ON_ACCENT": "#12130f",
 }
 
 
@@ -171,3 +177,57 @@ def overlay_send(cmd):
         return True
     except OSError:
         return False
+
+
+# ---------------------------------------------------------------- frequenza CPU (cpufreq)
+# Solo i file standard di Linux in sysfs: niente registri. Senza driver cpufreq tutto è un no-op.
+CPU_SYS = "/sys/devices/system/cpu"
+
+
+def _cpufreq_dirs():
+    out = []
+    try:
+        names = os.listdir(CPU_SYS)
+    except OSError:
+        return out
+    for n in sorted(names):
+        d = os.path.join(CPU_SYS, n, "cpufreq")
+        if n.startswith("cpu") and n[3:].isdigit() and os.path.isdir(d):
+            out.append(d)
+    return out
+
+
+def cpufreq_info():
+    """None senza cpufreq; altrimenti driver, frequenze (MHz), massimo hardware e massimo attuale."""
+    dirs = _cpufreq_dirs()
+    if not dirs:
+        return None
+
+    def rd(name, d=dirs[0]):
+        try:
+            with open(os.path.join(d, name)) as f:
+                return f.read().strip()
+        except OSError:
+            return ""
+    steps = sorted({int(x) // 1000 for x in rd("scaling_available_frequencies").split() if x.isdigit()}, reverse=True)
+    hw_max = int(rd("cpuinfo_max_freq") or 0) // 1000
+    caps = {int(rd("scaling_max_freq", d) or 0) // 1000 for d in dirs}
+    writable = all(os.access(os.path.join(d, "scaling_max_freq"), os.W_OK) for d in dirs)
+    return {"driver": rd("scaling_driver"), "steps": steps, "hw_max": hw_max, "max": max(caps),
+            "uniform": len(caps) == 1, "writable": writable, "cpus": len(dirs)}
+
+
+def set_cpu_max(mhz):
+    """Imposta il tetto di frequenza su tutte le CPU (None/0 = massimo hardware). True se riuscito."""
+    info = cpufreq_info()
+    if not info:
+        return False
+    target = info["hw_max"] if not mhz else min(int(mhz), info["hw_max"])
+    ok = True
+    for d in _cpufreq_dirs():
+        try:
+            with open(os.path.join(d, "scaling_max_freq"), "w") as f:
+                f.write(str(target * 1000))
+        except OSError:
+            ok = False
+    return ok

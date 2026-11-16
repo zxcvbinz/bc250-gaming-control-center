@@ -71,6 +71,7 @@ Desktop notifications (plus an on-screen toast for critical ones).
 | `launcher.mode` | `"ask"` | new games (installed or seen running): `ask` (listed as new in the Games page, you tick them), `auto`, `off` ([details](graphics.md#automatic-mode-in-detail)) |
 | `display.upscale_filter` / `.upscale_sharpness` | `fsr` / `3` | gamescope filter and sharpness for profiles with `upscale` |
 | `gpu_default.min` / `.max` | `1000` / `1750` | governor range without a profile |
+| `cpu.max_mhz` | `null` | CPU frequency cap without a profile (`null` = none). Needs cpufreq and `bc250-cpufreq`, see [CPU](cpu.md) |
 | `language` | `"it"` | language of the app, overlay and notifications: `it`, `en` (also from the picker at the bottom of the sidebar) |
 | `profiles` | `[]` | see [Profiles](profiles.md) |
 
@@ -89,6 +90,7 @@ Desktop notifications (plus an on-screen toast for critical ones).
 | `$XDG_RUNTIME_DIR/bc250/` | the same for Flatpak games |
 | `~/.config/systemd/user/bc250d.service`, `bc250-overlay.service` | user services |
 | `/etc/systemd/system/bc250-metricsfix.service` | root service (optional) |
+| `/etc/systemd/system/bc250-cpufreq.service` | root oneshot at boot (optional): makes `scaling_max_freq` writable by your group |
 
 ## Command line
 
@@ -98,6 +100,7 @@ bc250ctl toggle-panel      # Shift+F2
 bc250ctl toggle-hud        # Shift+F3
 bc250ctl limit 75          # global limit (or: off)
 bc250ctl status            # live state as JSON
-bc250-control --page 1     # open the app on a page (0 Dashboard, 1 Games, 2 FPS & engine, 3 Profiles,
-                           # 4 Overlay, 5 Display, 6 Health, 7 History, 8 Alerts)
+bc250-control --page games # open the app on a page, by name or by its number in the menu:
+                           # 1 overview, 2 history, 3 games, 4 profiles, 5 overlay,
+                           # 6 fps, 7 board, 8 display, 9 health
 ```

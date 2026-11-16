@@ -16,7 +16,7 @@ os.environ["QT_WAYLAND_SHELL_INTEGRATION"] = "layer-shell"
 
 from PyQt6 import sip  # noqa: E402
 from PyQt6.QtCore import QPointF, QRectF, QSocketNotifier, Qt, QTimer  # noqa: E402
-from PyQt6.QtGui import QFontMetrics, QPainter, QPen  # noqa: E402
+from PyQt6.QtGui import QFont, QFontMetrics, QPainter, QPen  # noqa: E402
 from PyQt6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 from . import common, i18n  # noqa: E402
@@ -43,7 +43,7 @@ A_TOP, A_BOTTOM, A_LEFT, A_RIGHT = 1, 2, 4, 8
 ANCHORS = {
     "top-left": A_TOP | A_LEFT, "top-center": A_TOP, "top-right": A_TOP | A_RIGHT,
     "bottom-left": A_BOTTOM | A_LEFT, "bottom-center": A_BOTTOM, "bottom-right": A_BOTTOM | A_RIGHT,
-    "center": 0,
+    "center": 0, "bottom-bar": A_BOTTOM | A_LEFT | A_RIGHT,
 }
 
 
@@ -71,7 +71,7 @@ class LayerWindow(QWidget):
 
 
 # ---------------------------------------------------------------- HUD
-from .hudpaint import HudPainter, draw_series, font, fps_col, qc, temp_col  # noqa: E402
+from .hudpaint import HudPainter, display_font, draw_series, font, fps_col, load_fonts, qc, temp_col  # noqa: E402
 
 
 class Hud(LayerWindow):
@@ -144,7 +144,12 @@ def edit_profile(game, key, value):
 
 # ---------------------------------------------------------------- pannello dettagli
 class Panel(LayerWindow):
-    W, H = 760, 580
+    """Pannello Shift+F2 in stile «cockpit»: barra a tutta larghezza in basso, il gioco resta visibile sopra.
+
+    Tre colonne: FPS del gioco · frametime e sensori · profilo modificabile con le frecce.
+    """
+    H = 330
+    LEFT_W, RIGHT_W = 400, 470
 
     def __init__(self, hist):
         super().__init__(keyboard=True)
@@ -153,12 +158,19 @@ class Panel(LayerWindow):
         self.sel = 0
         self.pending = {}  # modifiche appena fatte, finché il servizio non le riporta nello stato
         self.on_close = None
-        self.place("center", 0)
-        self.setFixedSize(self.W, self.H)
+        self.place("bottom-bar", 0)
+        self.fit_width()
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def fit_width(self):
+        scr = self.screen() or QApplication.primaryScreen()
+        w = scr.geometry().width() if scr else 1920
+        if (self.width(), self.height()) != (w, self.H):
+            self.setFixedSize(w, self.H)
 
     def update_from(self, state, cfg):
         self.state, self.cfg = state, cfg
+        self.fit_width()
         self.update()
 
     def keyPressEvent(self, e):
@@ -182,7 +194,201 @@ class Panel(LayerWindow):
             self.pending[key] = (values[i], time.monotonic())
         self.update()
 
+    # ------------------------------------------------------------ pezzi
+    @staticmethod
+    def caption(p, x, y, w, text, align=Qt.AlignmentFlag.AlignLeft, col=None):
+        f = font(7.5)
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.2)
+        p.setFont(f)
+        p.setPen(qc(col or P["MUTED"]))
+        text = QFontMetrics(f).elidedText(text.upper(), Qt.TextElideMode.ElideRight, int(w))
+        p.drawText(QRectF(x, y, w, 14), align | Qt.AlignmentFlag.AlignVCenter, text)
+
+    @staticmethod
+    def meter(p, r, frac, color_at, segments=10):
+        """Barra a segmenti: color_at(i, n) dà il colore del segmento acceso i."""
+        gap = 3
+        sw = (r.width() - gap * (segments - 1)) / segments
+        lit = 0 if frac is None else round(max(0.0, min(1.0, frac)) * segments)
+        p.setPen(Qt.PenStyle.NoPen)
+        for i in range(segments):
+            p.setBrush(qc(color_at(i, segments) if i < lit else P["OFF"]))
+            p.drawRect(QRectF(r.left() + i * (sw + gap), r.top(), sw, r.height()))
+
+    def status(self, g, eng, limit):
+        """(testo, colore) dello stato del limite FPS, come il vecchio badge."""
+        if not eng.get("limit_enabled", True):
+            return T("LIMITE FPS DISATTIVATO"), P["WARN"]
+        if g and g.get("guard_cut"):
+            return T("LIMITE {v} FPS · PROTEZIONE CALORE", v=limit), P["WARN"]
+        if g and limit:
+            fps = g.get("fps")
+            if fps and fps < limit * 0.9:
+                return T("SOTTO IL LIMITE"), fps_col(fps, limit)
+            return T("STABILE"), P["GOOD"]
+        if g:
+            return T("NESSUN LIMITE FPS"), P["MUTED"]
+        gl = eng.get("fps_limit")
+        return (T("LIMITE {v} FPS · PRONTO", v=gl) if gl else T("NESSUN LIMITE")), P["ACCENT"]
+
+    def draw_game(self, p, r, g, eng):
+        x, w = r.left() + 24, r.width() - 48
+        p.setFont(display_font(15))
+        p.setPen(qc(P["TEXT"]))
+        fm = QFontMetrics(p.font())
+        title = (g.get("name") or T("Nessun gioco attivo")).removesuffix(".exe").upper()
+        p.drawText(QRectF(x, r.top() + 18, w, 26), Qt.AlignmentFlag.AlignLeft, fm.elidedText(title, Qt.TextElideMode.ElideRight, int(w * 0.62 if g.get("api") else w)))
+        if g.get("api"):
+            self.caption(p, x, r.top() + 24, w, g["api"], Qt.AlignmentFlag.AlignRight)
+
+        if not g:
+            # nessun gioco: niente numero grande, solo lo stato del limite globale
+            stext, scol = self.status(g, eng, None)
+            p.setFont(font(9.5, True))
+            p.setPen(qc(scol))
+            p.drawText(QRectF(x, r.top() + 64, w, 20), Qt.AlignmentFlag.AlignLeft, "● " + stext)
+            p.setFont(font(8.5))
+            p.setPen(qc(P["MUTED"]))
+            p.drawText(QRectF(x, r.top() + 92, w, 60), int(Qt.AlignmentFlag.AlignLeft.value | Qt.TextFlag.TextWordWrap.value),
+                       T("Il pannello mostra FPS e frametime quando un gioco è in esecuzione."))
+            return
+        fps = g.get("fps")
+        limit = g.get("limit")
+        col = fps_col(fps, limit)
+        if col == P["GOOD"]:
+            col = P["ACCENT"]   # tutto bene: ambra, il colore del pannello; avvisi e problemi restano colorati
+        big = font(54, True)
+        p.setFont(big)
+        p.setPen(qc(col))
+        txt = f"{fps:.0f}" if fps else "—"
+        p.drawText(QRectF(x - 2, r.top() + 52, w, 80), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, txt)
+        tx = x + QFontMetrics(big).horizontalAdvance(txt) + 16
+        p.setFont(font(9))
+        p.setPen(qc(P["TEXT"]))
+        p.drawText(QRectF(tx, r.top() + 72, w, 18), Qt.AlignmentFlag.AlignLeft,
+                   T("/ {v} LIMITE", v=limit) if limit else T("/ SENZA LIMITE"))
+        stext, scol = self.status(g, eng, limit)
+        p.setFont(font(8.5, True))
+        p.setPen(qc(scol))
+        p.drawText(QRectF(tx, r.top() + 94, r.right() - tx - 12, 18), Qt.AlignmentFlag.AlignLeft, "● " + stext)
+
+        fv = [v for v in self.hist["fps"] if v]
+        stats = [(T("media 60s"), f"{sum(fv) / len(fv):.1f}" if fv else "—"),
+                 ("1% low", f"{g['low1']:.0f}" if g.get("low1") else "—"),
+                 ("frame", f"{g['frametime']:.1f}ms" if g.get("frametime") else "—")]
+        cw = w / 3
+        for i, (k, v) in enumerate(stats):
+            self.caption(p, x + i * cw, r.top() + 150, cw, k)
+            p.setFont(font(13, True))
+            p.setPen(qc(P["TEXT"]))
+            p.drawText(QRectF(x + i * cw, r.top() + 166, cw, 24), Qt.AlignmentFlag.AlignLeft, v)
+
+        sub = []
+        if g:
+            sub.append(T("profilo: {p}", p=g["profile"]) if g.get("profile") else T("nessun profilo"))
+            up = (g.get("profile_data") or {}).get("upscale")
+            if g.get("via_run") is True:
+                sub.append(T("collegato ✓") + (f" · {T(common.UPSCALE_NAMES.get(up, ''))}" if up else ""))
+            elif g.get("via_run") is False:
+                sub.append(T("non collegato") + (" · " + T("upscaling non attivo") if up else ""))
+            if g.get("appid"):
+                sub.append(f"Steam {g['appid']}")
+        if sub:
+            p.setFont(font(8))
+            p.setPen(qc(P["MUTED"]))
+            fm = QFontMetrics(p.font())
+            p.drawText(QRectF(x, r.bottom() - 34, w, 16), Qt.AlignmentFlag.AlignLeft,
+                       fm.elidedText("  ·  ".join(sub), Qt.TextElideMode.ElideRight, int(w)))
+
+    def draw_center(self, p, r, g, s, gov, st):
+        x, w = r.left() + 24, r.width() - 48
+        fps = g.get("fps")
+        limit = g.get("limit") if g else None
+        fts = g.get("frametimes") or []
+        target = 1000.0 / limit if limit else (sum(fts) / len(fts) if fts else None)
+        self.caption(p, x, r.top() + 18, w, T("frametime · ultimi 120 frame"))
+        if target:
+            self.caption(p, x, r.top() + 18, w, T("obiettivo {v} ms ┄┄", v=f"{target:.1f}"), Qt.AlignmentFlag.AlignRight)
+        gr = QRectF(x, r.top() + 40, w, 96)
+        p.setPen(QPen(qc(P["BORDER"]), 1))
+        p.setBrush(qc(P["CARD"], 255))
+        p.drawRect(gr)
+        inner = gr.adjusted(6, 8, -6, -6)
+        if fts:
+            vmax = max(target * 2, max(fts) * 1.1)
+            ty = inner.bottom() - inner.height() * target / vmax
+            p.setPen(QPen(qc(P["DIM"]), 1, Qt.PenStyle.DashLine))
+            p.drawLine(QPointF(inner.left(), ty), QPointF(inner.right(), ty))
+            col = fps_col(fps, limit)
+            draw_series(p, inner, fts, vmax, P["ACCENT"] if col == P["GOOD"] else col, fill=False, width=1.6)
+        else:
+            p.setFont(font(8.5))
+            p.setPen(qc(P["DIM"]))
+            p.drawText(gr, Qt.AlignmentFlag.AlignCenter, T("nessun dato dal motore FPS"))
+
+        gmax = gov.get("max") or 2000
+        thr = gov.get("throttle") or 85
+        guard = ((g.get("profile_data") or {}).get("heat_guard")) if g else None
+        throttling = st.get("throttling")
+
+        def temp_seg(lo, hi, warn, bad):
+            return lambda i, n: temp_col(lo + (hi - lo) * (i + 1) / n, warn, bad)
+
+        cpu, gpu, clk, pw = s.get("cpu_temp"), s.get("gpu_temp"), s.get("gpu_clk"), s.get("power")
+        meters = [
+            ("CPU", f"{cpu:.0f}°C" if cpu is not None else "—", P["TEXT"],
+             None if cpu is None else (cpu - 30) / 70, temp_seg(30, 100, 80, 90),
+             T("taglio {t}°", t=thr) + (" · " + T("guardia {t}°", t=guard) if guard else "")),
+            ("GPU", f"{gpu:.0f}°C" if gpu is not None else "—", P["TEXT"],
+             None if gpu is None else (gpu - 30) / 70, temp_seg(30, 100, thr - 10, thr),
+             T("carico {v}%", v=f"{s.get('gpu_busy') or 0:.0f}")),
+            (T("clock"), f"{clk:.0f}" if clk else "—", P["BAD"] if throttling else P["CYAN"],
+             None if not clk else clk / max(2000, gmax), lambda i, n: P["BAD"] if throttling else P["CYAN"],
+             T("TAGLIO IN CORSO") if throttling else f"MHz · {gov.get('min') or '?'}–{gmax}"),
+            ("SoC", f"{pw:.0f} W" if pw is not None else "—", P["TEXT"],
+             None if pw is None else pw / 160, lambda i, n: P["MUTED"],
+             T("ventola {v} rpm", v=s.get("fan") or 0)),
+        ]
+        gap = 22 if w > 700 else 12
+        mw = (w - gap * 3) / 4
+        y = gr.bottom() + 18
+        for i, (name, val, vcol, frac, seg, sub) in enumerate(meters):
+            mx = x + i * (mw + gap)
+            self.caption(p, mx, y, mw, name)
+            p.setFont(font(10, True))
+            p.setPen(qc(vcol))
+            p.drawText(QRectF(mx, y - 2, mw, 18), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, val)
+            self.meter(p, QRectF(mx, y + 22, mw, 10), frac, seg)
+            fan_bad = name == "SoC" and not s.get("fan")
+            self.caption(p, mx, y + 38, mw, sub, col=P["BAD"] if fan_bad or (throttling and i == 2) else P["DIM"])
+
+        ram = s.get("ram") or [0, 0]
+        vram = s.get("vram") or [0, 0]
+        info = [f"RAM {ram[0]:.1f}/{ram[1]:.0f}G", f"VRAM {(vram[0] or 0):.0f}M",
+                f"CPU {s.get('cpu_load') or 0:.0f}%",
+                f"{s.get('cores', '?')}C/{s.get('threads', '?')}T"
+                + (f" ≤{st['cpufreq']['max']} MHz" if (st.get("cpufreq") or {}).get("max") else ""),
+                "GOVERNOR " + (T("TAGLIO") if throttling else T("normale")).upper()]
+        alerts = st.get("alerts") or []
+        if alerts:
+            p.setFont(font(8.5, True))
+            p.setPen(qc(P["BAD"]))
+            fm = QFontMetrics(p.font())
+            p.drawText(QRectF(x, r.bottom() - 34, w, 16), Qt.AlignmentFlag.AlignLeft,
+                       fm.elidedText("⚠ " + "  ·  ".join(a["title"] for a in alerts), Qt.TextElideMode.ElideRight, int(w)))
+        else:
+            self.caption(p, x, r.bottom() - 33, w, "    ".join(info))
+
     def draw_profile(self, p, r, g):
+        x, w = r.left() + 24, r.width() - 48
+        if not g:
+            self.caption(p, x, r.top() + 18, w, T("Profilo del gioco"))
+            p.setFont(font(9))
+            p.setPen(qc(P["MUTED"]))
+            p.drawText(QRectF(x, r.top() + 40, w, r.height() - 80), int(Qt.AlignmentFlag.AlignCenter.value | Qt.TextFlag.TextWordWrap.value),
+                       T("Avvia un gioco per modificarne il profilo da qui."))
+            self.caption(p, x, r.bottom() - 33, w, T("Shift+F1 limite · Shift+F3 overlay · Esc chiudi"), col=P["DIM"])
+            return
         prof = dict(g.get("profile_data") or {})
         now = time.monotonic()
         for k, (v, t) in list(self.pending.items()):
@@ -191,212 +397,65 @@ class Panel(LayerWindow):
             else:
                 del self.pending[k]
         name = g.get("profile") or (g["name"].removesuffix(".exe") + " " + T("(nuovo)"))
-        self.card(p, r, T("Profilo del gioco") + f" · {name}")
-        cols = 4
-        cw = (r.width() - 24 - (cols - 1) * 10) / cols
-        chh = 40
+        fm = QFontMetrics(font(7.5))
+        self.caption(p, x, r.top() + 18, w, fm.elidedText(T("Profilo del gioco") + " · " + name,
+                                                          Qt.TextElideMode.ElideRight, int(w * 0.9)))
+        rh = 26
+        top = r.top() + 40
         for i, (key, label_, _values, fmt) in enumerate(PROFILE_FIELDS):
-            cx = r.left() + 12 + (i % cols) * (cw + 10)
-            cy = r.top() + 26 + (i // cols) * (chh + 8)
-            cell = QRectF(cx, cy, cw, chh)
+            ry = top + i * rh
+            row = QRectF(x, ry, w, rh - 2)
             selected = i == self.sel
-            p.setPen(QPen(qc(P["ACCENT"]), 1.5) if selected else Qt.PenStyle.NoPen)
-            p.setBrush(qc(P["CARD2"], 255))
-            p.drawRoundedRect(cell, 8, 8)
-            p.setFont(font(7))
-            p.setPen(qc(P["MUTED"]))
-            p.drawText(QRectF(cx + 10, cy + 4, cw - 20, 12), Qt.AlignmentFlag.AlignLeft, T(label_))
             val = fmt(prof.get(key, FIELD_DEFAULT[key]), g)
-            p.setFont(font(9.5, True))
-            p.setPen(qc(P["TEXT"] if selected else P["TEXT"]))
-            txt = f"‹  {val}  ›" if selected else val
-            p.drawText(QRectF(cx + 10, cy + 17, cw - 20, 18), Qt.AlignmentFlag.AlignLeft, txt)
-        p.setFont(font(7.5))
-        p.setPen(qc(P["DIM"]))
-        hint = T("↑ ↓ scegli  ·  ← → cambia  ·  Esc chiudi  ·  si salva da solo")
-        if prof.get("vrr") is not None and PROFILE_FIELDS[self.sel][0] == "vrr":
-            hint = T("VRR: al cambio lo schermo diventa nero per un attimo") + "  ·  " + hint
-        p.drawText(QRectF(r.left() + 12, r.bottom() - 18, r.width() - 24, 12), Qt.AlignmentFlag.AlignRight, hint)
-
-    def card(self, p, r, title):
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(qc(P["CARD"], 235))
-        p.drawRoundedRect(r, 10, 10)
-        p.setFont(font(7.5, True))
-        p.setPen(qc(P["MUTED"]))
-        p.drawText(QRectF(r.left() + 12, r.top() + 8, r.width() - 24, 12), Qt.AlignmentFlag.AlignLeft, title.upper())
-
-    def graph_card(self, p, r, title, key, unit, vmax, color_fn, vmin=0.0, fmt="{:.0f}"):
-        self.card(p, r, title)
-        vals = list(self.hist[key])
-        cur = vals[-1] if vals else None
-        p.setFont(font(15, True))
-        col = color_fn(cur)
-        p.setPen(qc(col))
-        p.drawText(QRectF(r.left() + 12, r.top() + 22, r.width() - 24, 24), Qt.AlignmentFlag.AlignLeft,
-                   (fmt.format(cur) + unit) if cur is not None else "—")
-        good = [v for v in vals if v is not None]
-        if good:
-            p.setFont(font(7.5))
-            p.setPen(qc(P["DIM"]))
-            p.drawText(QRectF(r.left() + 12, r.top() + 24, r.width() - 24, 20),
-                       Qt.AlignmentFlag.AlignRight,
-                       T("min {a}  max {b}", a=fmt.format(min(good)), b=fmt.format(max(good))))
-        gr = QRectF(r.left() + 12, r.top() + 52, r.width() - 24, r.height() - 62)
-        draw_series(p, gr, vals, vmax, col, vmin=vmin)
+            if selected:
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(qc(P["ACCENT"]))
+                p.drawRect(row)
+                p.setFont(font(9.5, True))
+                p.setPen(qc(P["ON_ACCENT"]))
+                val = f"‹ {val} ›"
+            else:
+                p.setPen(QPen(qc(P["OFF"]), 1))
+                p.drawLine(QPointF(x, row.bottom() + 1), QPointF(x + w, row.bottom() + 1))
+                p.setFont(font(9.5))
+                p.setPen(qc(P["MUTED"]))
+            p.drawText(row.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                       T(label_).upper())
+            if not selected:
+                p.setPen(qc(P["TEXT"]))
+            p.drawText(row.adjusted(10, 0, -10, 0), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, val)
+        hint = T("↑↓ scegli · ←→ cambia · Esc chiudi · salva da solo")
+        if PROFILE_FIELDS[self.sel][0] == "vrr":
+            hint = T("VRR: al cambio lo schermo diventa nero per un attimo")
+        self.caption(p, x, r.bottom() - 33, w, hint, col=P["WARN"] if PROFILE_FIELDS[self.sel][0] == "vrr" else P["DIM"])
 
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         W, H = self.width(), self.height()
-        p.setPen(QPen(qc(P["BORDER"]), 1))
-        p.setBrush(qc(P["BG"], 238))
-        p.drawRoundedRect(QRectF(0.5, 0.5, W - 1, H - 1), 14, 14)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(qc(P["BG"], 240))
+        p.drawRect(QRectF(0, 0, W, H))
+        p.setBrush(qc(P["ACCENT"]))
+        p.drawRect(QRectF(0, 0, W, 2))
         st = self.state
         g = st.get("game") or {}
         s = st.get("sensors") or {}
         eng = st.get("engine") or {}
         gov = st.get("governor") or {}
 
-        # --- intestazione
-        p.setFont(font(13, True))
-        p.setPen(qc(P["TEXT"]))
-        title = g.get("name") or T("Nessun gioco attivo")
-        p.drawText(QRectF(20, 14, 460, 22), Qt.AlignmentFlag.AlignLeft, title)
-        p.setFont(font(8.5))
-        p.setPen(qc(P["MUTED"]))
-        sub = []
-        if g:
-            sub.append(g.get("api", ""))
-            sub.append(T("profilo: {p}", p=g["profile"]) if g.get("profile") else T("nessun profilo"))
-            if g.get("appid"):
-                sub.append(f"Steam {g['appid']}")
-            # partito dal lanciatore bc250-run? (serve per l'upscaling FSR dal profilo)
-            up = (g.get("profile_data") or {}).get("upscale")
-            if g.get("via_run") is True:
-                sub.append(T("collegato ✓") + (f" · {T(common.UPSCALE_NAMES.get(up, ''))}" if up else ""))
-            elif g.get("via_run") is False:
-                sub.append(T("non collegato") + (" · " + T("upscaling non attivo") if up else ""))
-        sub.append(f"BC-250 · {s.get('cores', '?')} core / {s.get('threads', '?')} thread")
-        p.drawText(QRectF(20, 38, 520, 16), Qt.AlignmentFlag.AlignLeft, "  ·  ".join(sub))
-
-        # --- badge limite FPS
-        limit = g.get("limit") if g else None
-        if not eng.get("limit_enabled", True):
-            badge, col = T("LIMITE FPS DISATTIVATO"), P["WARN"]
-        elif g and g.get("guard_cut"):
-            badge, col = T("LIMITE {v} FPS · PROTEZIONE CALORE", v=limit), P["WARN"]
-        elif g and limit:
-            badge, col = T("LIMITE {v} FPS · ATTIVO", v=limit), P["GOOD"]
-        elif g:
-            badge, col = T("NESSUN LIMITE FPS"), P["MUTED"]
-        else:
-            gl = eng.get("fps_limit")
-            badge, col = (T("LIMITE {v} FPS · PRONTO", v=gl) if gl else T("NESSUN LIMITE")), P["ACCENT"]
-        p.setFont(font(8.5, True))
-        bw = QFontMetrics(font(8.5, True)).horizontalAdvance(badge) + 24
-        br = QRectF(W - 20 - bw, 18, bw, 26)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(qc(col, 45))
-        p.drawRoundedRect(br, 13, 13)
-        p.setPen(qc(col))
-        p.drawText(br, Qt.AlignmentFlag.AlignCenter, badge)
-
-        # --- FPS + frametime
-        fr = QRectF(20, 64, W - 40, 128)
-        self.card(p, fr, "Frame")
-        fps = g.get("fps")
-        p.setFont(font(30, True))
-        p.setPen(qc(fps_col(fps, limit)))
-        p.drawText(QRectF(fr.left() + 14, fr.top() + 22, 150, 46), Qt.AlignmentFlag.AlignLeft,
-                   f"{fps:.0f}" if fps else "—")
-        fv = [v for v in self.hist["fps"] if v]
-        p.setFont(font(9))
-        p.setPen(qc(P["MUTED"]))
-        lines = [
-            T("media 60s") + (f"  {sum(fv) / len(fv):.0f}" if fv else "  —"),
-            f"1% low     {g['low1']:.0f}" if g.get("low1") else "1% low     —",
-            f"frametime  {g['frametime']:.1f} ms" if g.get("frametime") else "frametime  —",
-        ]
-        for i, ln in enumerate(lines):
-            p.drawText(QRectF(fr.left() + 14, fr.top() + 70 + i * 16, 170, 16), Qt.AlignmentFlag.AlignLeft, ln)
-        fts = g.get("frametimes") or []
-        gr = QRectF(fr.left() + 190, fr.top() + 26, fr.width() - 204, fr.height() - 38)
+        # colonne laterali fisse sugli schermi larghi, in proporzione su quelli stretti
+        lw, rw = min(self.LEFT_W, W * 0.25), min(self.RIGHT_W, W * 0.3)
+        left = QRectF(0, 2, lw, H - 2)
+        right = QRectF(W - rw, 2, rw, H - 2)
+        center = QRectF(left.right(), 2, right.left() - left.right(), H - 2)
         p.setPen(QPen(qc(P["BORDER"]), 1))
-        p.drawLine(QPointF(gr.left(), gr.bottom()), QPointF(gr.right(), gr.bottom()))
-        if fts:
-            target = 1000.0 / limit if limit else sum(fts) / len(fts)
-            vmax = max(target * 2, max(fts) * 1.1)
-            ty = gr.bottom() - gr.height() * target / vmax
-            p.setPen(QPen(qc(P["DIM"]), 1, Qt.PenStyle.DashLine))
-            p.drawLine(QPointF(gr.left(), ty), QPointF(gr.right(), ty))
-            draw_series(p, gr, fts, vmax, fps_col(fps, limit), width=1.4)
-            p.setFont(font(7))
-            p.setPen(qc(P["DIM"]))
-            p.drawText(QRectF(gr.left(), gr.top() - 12, gr.width(), 12), Qt.AlignmentFlag.AlignRight,
-                       T("frametime ultimi 120 frame (ms)"))
+        p.drawLine(QPointF(left.right(), 2), QPointF(left.right(), H))
+        p.drawLine(QPointF(right.left(), 2), QPointF(right.left(), H))
 
-        # --- grafici sensori
-        y = fr.bottom() + 12
-        cw = (W - 40 - 3 * 12) / 4
-        ch = 128
-        gmax = gov.get("max") or 2000
-        thr = gov.get("throttle") or 85
-        self.graph_card(p, QRectF(20, y, cw, ch), "CPU", "cpu_temp", "°C", 100,
-                        lambda v: temp_col(v, 80, 90), vmin=30)
-        self.graph_card(p, QRectF(20 + (cw + 12), y, cw, ch), "GPU", "gpu_temp", "°C", 100,
-                        lambda v: temp_col(v, thr - 10, thr), vmin=30)
-        self.graph_card(p, QRectF(20 + 2 * (cw + 12), y, cw, ch), T("Clock GPU (max {v})", v=gmax), "gpu_clk", "",
-                        max(2000, gmax), lambda v: P["BAD"] if st.get("throttling") else P["ACCENT"], vmin=0)
-        self.graph_card(p, QRectF(20 + 3 * (cw + 12), y, cw, ch), T("Consumo"), "power", " W", 160,
-                        lambda v: P["PURPLE"])
-
-        # --- riga info
-        y += ch + 12
-        ir = QRectF(20, y, W - 40, 50)
-        self.card(p, ir, T("Sistema"))
-        ram = s.get("ram") or [0, 0]
-        vram = s.get("vram") or [0, 0]
-        info = [
-            (T("Ventola"), f"{s.get('fan') or 0} rpm", P["TEXT"] if s.get("fan") else P["BAD"]),
-            (T("Carico GPU"), f"{s.get('gpu_busy') or 0:.0f}%", P["TEXT"]),
-            (T("Carico CPU"), f"{s.get('cpu_load') or 0:.0f}%", P["TEXT"]),
-            ("RAM", f"{ram[0]:.1f}/{ram[1]:.0f} G", P["WARN"] if ram[1] and ram[0] / ram[1] > 0.9 else P["TEXT"]),
-            ("VRAM", f"{(vram[0] or 0):.0f} M", P["TEXT"]),
-            ("Governor", f"{gov.get('min') or '?'}–{gov.get('max') or '?'}", P["TEXT"]),
-            (T("Taglio"), T("IN CORSO") if st.get("throttling") else f"{thr}°C",
-             P["BAD"] if st.get("throttling") else P["TEXT"]),
-        ]
-        iw = (ir.width() - 24) / len(info)
-        for i, (k, v, c) in enumerate(info):
-            p.setFont(font(7))
-            p.setPen(qc(P["DIM"]))
-            p.drawText(QRectF(ir.left() + 12 + i * iw, ir.top() + 20, iw, 10), Qt.AlignmentFlag.AlignLeft, k)
-            p.setFont(font(9, True))
-            p.setPen(qc(c))
-            p.drawText(QRectF(ir.left() + 12 + i * iw, ir.top() + 30, iw, 16), Qt.AlignmentFlag.AlignLeft, v)
-
-        # --- profilo del gioco
-        y += 50 + 12
-        pr = QRectF(20, y, W - 40, 142)
-        if g:
-            self.draw_profile(p, pr, g)
-        else:
-            self.card(p, pr, T("Profilo del gioco"))
-            p.setFont(font(9))
-            p.setPen(qc(P["MUTED"]))
-            p.drawText(pr, Qt.AlignmentFlag.AlignCenter, T("Avvia un gioco per modificarne il profilo da qui."))
-
-        # --- avvisi + tasti
-        p.setFont(font(8))
-        alerts = st.get("alerts") or []
-        if alerts:
-            p.setPen(qc(P["BAD"]))
-            p.drawText(QRectF(20, H - 26, W - 40, 16), Qt.AlignmentFlag.AlignLeft,
-                       "⚠ " + "  ·  ".join(a["title"] for a in alerts))
-        p.setPen(qc(P["DIM"]))
-        p.drawText(QRectF(20, H - 26, W - 40, 16), Qt.AlignmentFlag.AlignRight,
-                   T("Shift+F1 limite FPS   Shift+F2 pannello   Shift+F3 overlay"))
+        self.draw_game(p, left, g, eng)
+        self.draw_center(p, center, g, s, gov, st)
+        self.draw_profile(p, right, g)
         p.end()
 
 
@@ -422,11 +481,13 @@ class Toast(LayerWindow):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(qc(P["BG"], 235))
-        p.drawRoundedRect(QRectF(0, 0, self.width(), self.height()), 22, 22)
+        p.setBrush(qc(P["BG"], 240))
+        p.drawRect(QRectF(0, 0, self.width(), self.height()))
         # avvisi di "spento" in giallo (testi in italiano e nella lingua attuale)
         off = ("DISATT", "nascosto", T("DISATTIVATO"), T("nascosto"))
         col = P["WARN"] if any(w in self.text for w in off) else P["ACCENT"]
+        p.setBrush(qc(col))
+        p.drawRect(QRectF(0, 0, 3, self.height()))
         p.setPen(qc(col))
         p.setFont(font(11, True))
         p.drawText(QRectF(0, 0, self.width(), self.height()), Qt.AlignmentFlag.AlignCenter, self.text)
@@ -534,6 +595,7 @@ class Controller:
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("bc250-overlay")
+    load_fonts()
     app.setQuitOnLastWindowClosed(False)
     _c = Controller(app)  # noqa: F841
     sys.exit(app.exec())

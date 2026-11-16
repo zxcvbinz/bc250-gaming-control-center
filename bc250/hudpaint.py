@@ -9,10 +9,11 @@ Tre stili:
   full     riquadro con FPS, grafico frametime e metriche
 """
 import math
+import os
 import time
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainterPath, QPen
+from PyQt6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPainterPath, QPen
 
 from . import common
 from .i18n import T
@@ -46,11 +47,34 @@ def qc(hexcol, alpha=255):
     return c
 
 
-def font(size, bold=False):
-    f = QFont()
+# font del progetto (OFL, in assets/fonts): monospace per i numeri, Space Grotesk per i titoli
+MONO, DISPLAY = "JetBrains Mono", "Space Grotesk"
+_FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "fonts")
+_fonts_loaded = False
+
+
+def load_fonts():
+    """Registra i font inclusi; senza (file mancanti) Qt ripiega su Fira Code / monospace di sistema."""
+    global _fonts_loaded
+    if _fonts_loaded:
+        return
+    _fonts_loaded = True
+    # istanze statiche dei font variabili (Qt non applica il grassetto all'asse wght)
+    for name in ("JetBrainsMono-Regular.ttf", "JetBrainsMono-Bold.ttf",
+                 "SpaceGrotesk-Regular.ttf", "SpaceGrotesk-Bold.ttf"):
+        QFontDatabase.addApplicationFont(os.path.join(_FONTS_DIR, name))
+
+
+def font(size, bold=False, family=None):
+    f = QFont(family or MONO)
+    f.setFamilies([family or MONO, "Fira Code", "monospace"])
     f.setPointSizeF(size)
     f.setBold(bold)
     return f
+
+
+def display_font(size, bold=True):
+    return font(size, bold, DISPLAY)
 
 
 def temp_col(t, warn=75, bad=85):
@@ -102,9 +126,10 @@ ITEM_LABELS = {
     "cpu_clk": "CPU MHz", "ft": "MS",
 }
 
-LOOK_DEFAULT = {"labels": True, "border": False, "colors": "status", "accent": "#4fa3ff", "limit_badge": True}
-ACCENTS = [("#4fa3ff", "Blu"), ("#3fb950", "Verde"), ("#a371f7", "Viola"), ("#e6edf3", "Bianco"),
-           ("#ff7b72", "Corallo"), ("#d29922", "Ambra")]
+LOOK_DEFAULT = {"labels": True, "border": False, "colors": "status", "accent": "#ffb000", "limit_badge": True}
+ACCENTS = [("#ffb000", "Ambra"), ("#5ad1e6", "Ciano"), ("#7fd88f", "Verde"), ("#b48cff", "Viola"),
+           ("#e8e4d8", "Bianco"), ("#4fa3ff", "Blu"),
+           ("#ff7b72", "Corallo")]
 
 
 def look(cfg):

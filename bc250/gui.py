@@ -19,11 +19,11 @@ from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboB
                              QSizePolicy, QSlider, QSpinBox, QStackedWidget, QTableWidget, QTableWidgetItem, QTreeWidget, QTreeWidgetItem,
                              QVBoxLayout, QWidget)
 
-from . import common, gamecfg, health, i18n
+from . import __version__, common, gamecfg, health, i18n
 from .engine import write_control
 from .i18n import T
-from .hudpaint import (ACCENTS, CENTER, DEMOS, IDLE, LOOK_DEFAULT, STYLES, WATCH, HudPainter,
-                       demo_state)
+from .hudpaint import (ACCENTS, CENTER, DEMOS, DISPLAY, IDLE, LOOK_DEFAULT, MONO, STYLES, WATCH, HudPainter,
+                       demo_state, display_font, font, load_fonts)
 from .install import FLATPAK_GL_APPS, flatpak_gl, flatpak_gl_enabled
 from .sensors import Sensors, governor_set
 
@@ -31,75 +31,64 @@ P = common.PALETTE
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 STYLE = f"""
-QWidget {{ background:{P['BG']}; color:{P['TEXT']}; font-size:10pt; }}
+QWidget {{ background:{P['BG']}; color:{P['TEXT']}; font-size:10pt; font-family:'{MONO}'; }}
 QLabel {{ background:transparent; }}
-QFrame#card {{ background:{P['CARD']}; border:1px solid {P['BORDER']}; border-radius:12px; }}
+QFrame#card {{ background:{P['CARD']}; border:1px solid {P['BORDER']}; border-radius:0px; }}
 QListWidget#nav {{ background:{P['SIDEBAR']}; border:none; border-right:1px solid {P['BORDER']};
-    padding:10px 8px; outline:0; }}
-QListWidget#nav::item {{ padding:9px 12px; border-radius:8px; margin:2px 0; color:{P['MUTED']}; }}
-QListWidget#nav::item:selected {{ background:{P['CARD2']}; color:{P['TEXT']}; }}
+    padding:10px 0; outline:0; }}
+QListWidget#nav::item {{ padding:9px 12px 9px 18px; border-left:2px solid transparent; margin:0; color:{P['MUTED']}; }}
+QListWidget#nav::item:selected {{ background:{P['CARD2']}; color:{P['TEXT']}; border-left:2px solid {P['ACCENT']}; }}
 QListWidget#nav::item:hover:!selected {{ background:{P['CARD']}; }}
-QPushButton {{ background:{P['CARD2']}; border:1px solid {P['BORDER']}; border-radius:8px;
+QPushButton {{ background:{P['CARD2']}; border:1px solid {P['BORDER']}; border-radius:0px;
     padding:6px 14px; color:{P['TEXT']}; }}
 QPushButton:hover {{ border-color:{P['ACCENT']}; }}
-QPushButton#primary {{ background:{P['ACCENT']}; border:none; color:#fff; font-weight:bold; }}
+QPushButton#primary {{ background:{P['ACCENT']}; border:none; color:{P['ON_ACCENT']}; font-weight:bold; }}
 QPushButton#danger {{ color:{P['BAD']}; }}
-QComboBox, QSpinBox, QLineEdit {{ background:{P['BG']}; border:1px solid {P['BORDER']}; border-radius:7px;
+QComboBox, QSpinBox, QLineEdit {{ background:{P['BG']}; border:1px solid {P['BORDER']}; border-radius:0px;
     padding:4px 8px; min-height:22px; }}
 QComboBox {{ combobox-popup:0; }}
 QComboBox::drop-down {{ border:none; width:22px; }}
 QComboBox::down-arrow {{ image:url({ASSETS}/chevron.svg); width:12px; height:12px; }}
 QComboBox QAbstractItemView {{ background:{P['CARD2']}; color:{P['TEXT']}; border:1px solid {P['BORDER']};
-    border-radius:6px; padding:4px; outline:0; selection-background-color:{P['ACCENT']}; selection-color:#fff; }}
+    border-radius:0px; padding:4px; outline:0; selection-background-color:{P['ACCENT']}; selection-color:{P['ON_ACCENT']}; }}
 QComboBox QAbstractItemView::item {{ min-height:24px; padding:2px 8px; }}
 QMenu {{ background:{P['CARD2']}; border:1px solid {P['BORDER']}; padding:4px; }}
-QMenu::item:selected {{ background:{P['ACCENT']}; }}
+QMenu::item:selected {{ background:{P['ACCENT']}; color:{P['ON_ACCENT']}; }}
 QCheckBox {{ spacing:10px; background:transparent; }}
 QCheckBox::indicator {{ width:34px; height:18px; image:url({ASSETS}/switch-off.svg); }}
 QCheckBox::indicator:checked {{ image:url({ASSETS}/switch-on.svg); }}
-QSlider::groove:horizontal {{ height:4px; background:{P['OFF']}; border-radius:2px; }}
-QSlider::handle:horizontal {{ width:14px; margin:-5px 0; border-radius:7px; background:{P['ACCENT']}; }}
+QSlider::groove:horizontal {{ height:4px; background:{P['OFF']}; border-radius:0px; }}
+QSlider::handle:horizontal {{ width:10px; margin:-6px 0; border-radius:0px; background:{P['ACCENT']}; }}
 QTableWidget {{ background:{P['CARD']}; border:none; gridline-color:{P['BORDER']}; }}
-QHeaderView::section {{ background:{P['CARD2']}; color:{P['MUTED']}; border:none; padding:6px; }}
+QHeaderView::section {{ background:{P['CARD2']}; color:{P['MUTED']}; border:none; border-bottom:1px solid {P['BORDER']}; padding:6px; }}
 QTableWidget::item:selected {{ background:{P['CARD2']}; color:{P['TEXT']}; }}
 QTreeWidget#hist {{ background:{P['SIDEBAR']}; border:none; border-right:1px solid {P['BORDER']};
     padding:8px 6px; outline:0; }}
-QTreeWidget#hist::item {{ padding:7px 6px; border-radius:8px; margin:1px 0; color:{P['MUTED']}; }}
-QTreeWidget#hist::item:selected {{ background:{P['CARD2']}; color:{P['TEXT']}; }}
+QTreeWidget#hist::item {{ padding:7px 6px; border-radius:0px; margin:1px 0; color:{P['MUTED']}; }}
+QTreeWidget#hist::item:selected {{ background:{P['CARD2']}; color:{P['TEXT']}; border-left:2px solid {P['ACCENT']}; }}
 QTreeWidget#hist::item:hover:!selected {{ background:{P['CARD']}; }}
-QListWidget#items {{ background:{P['BG']}; border:1px solid {P['BORDER']}; border-radius:8px; padding:4px; outline:0; }}
-QListWidget#items::item {{ padding:4px 6px; border-radius:6px; }}
+QListWidget#items {{ background:{P['BG']}; border:1px solid {P['BORDER']}; border-radius:0px; padding:4px; outline:0; }}
+QListWidget#items::item {{ padding:4px 6px; border-radius:0px; }}
 QListWidget#items::item:hover {{ background:{P['CARD2']}; }}
 QListWidget#items::item:selected {{ background:{P['CARD2']}; color:{P['TEXT']}; }}
-QListWidget#items::indicator {{ width:16px; height:16px; border-radius:4px; }}
+QListWidget#items::indicator {{ width:16px; height:16px; border-radius:0px; }}
 QListWidget#items::indicator:unchecked {{ border:1px solid {P['MUTED']}; background:{P['BG']}; }}
 QListWidget#items::indicator:checked {{ border:1px solid {P['ACCENT']}; background:{P['ACCENT']}; image:url({ASSETS}/check.svg); }}
-QLineEdit#find {{ background:{P['BG']}; border:1px solid {P['BORDER']}; border-radius:8px; padding:6px 8px; }}
+QLineEdit#find {{ background:{P['BG']}; border:1px solid {P['BORDER']}; border-radius:0px; padding:6px 8px; }}
 QLineEdit#find:focus {{ border-color:{P['ACCENT']}; }}
 QListView#findpop {{ background:{P['CARD2']}; color:{P['TEXT']}; border:1px solid {P['BORDER']}; padding:4px;
-    selection-background-color:{P['ACCENT']}; outline:0; }}
+    selection-background-color:{P['ACCENT']}; selection-color:{P['ON_ACCENT']}; outline:0; }}
 QScrollArea {{ border:none; }}
 QScrollBar:vertical {{ background:transparent; width:8px; }}
-QScrollBar::handle:vertical {{ background:{P['OFF']}; border-radius:4px; min-height:30px; }}
+QScrollBar::handle:vertical {{ background:{P['OFF']}; border-radius:0px; min-height:30px; }}
 QScrollBar:horizontal {{ background:transparent; height:8px; }}
-QScrollBar::handle:horizontal {{ background:{P['OFF']}; border-radius:4px; min-width:30px; }}
+QScrollBar::handle:horizontal {{ background:{P['OFF']}; border-radius:0px; min-width:30px; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height:0; width:0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background:transparent; }}
 """
 
 
 # ---------------------------------------------------------------- piccoli componenti
-def nav_icon(name):
-    """Icona del tema con la stessa immagine anche da selezionata/attiva (il tema la ricolora scura)."""
-    src = QIcon.fromTheme(name)
-    out = QIcon()
-    for size in (16, 22, 32):
-        pm = src.pixmap(size, size)
-        for mode in (QIcon.Mode.Normal, QIcon.Mode.Selected, QIcon.Mode.Active):
-            out.addPixmap(pm, mode)
-    return out
-
-
 class WrapLabel(QLabel):
     """QLabel che va a capo calcolando l'altezza sulla larghezza vera.
     Il QLabel normale riserva l'altezza per una larghezza più stretta: card più alte del testo."""
@@ -195,7 +184,10 @@ def page(title, subtitle=None):
     lay = QVBoxLayout(inner)
     lay.setContentsMargins(26, 22, 26, 22)
     lay.setSpacing(14)
-    lay.addWidget(label(title, 17, bold=True))
+    head = label(title, 19, bold=True)
+    head.setStyleSheet(f"color:{P['TEXT']}; font-family:'{DISPLAY}'; font-size:19pt; font-weight:bold;"
+                       f" border-bottom:1px solid {P['BORDER']}; padding-bottom:10px;")
+    lay.addWidget(head)
     if subtitle:
         lay.addWidget(label(subtitle, 9.5, P["MUTED"], wrap=True))
     outer.setWidget(inner)
@@ -211,9 +203,10 @@ def temp_color(t, warn=75, bad=85):
 class Tile(QWidget):
     """Valore grande + etichetta + sparkline."""
 
-    def __init__(self, name, unit, vmax, warn=None, bad=None):
+    def __init__(self, name, unit, vmax, warn=None, bad=None, color=None):
         super().__init__()
         self.name, self.unit, self.vmax, self.warn, self.bad = name, unit, vmax, warn, bad
+        self.base = color or P["ACCENT"]
         self.value, self.hist = None, deque(maxlen=90)
         self.setMinimumHeight(78)
 
@@ -226,7 +219,7 @@ class Tile(QWidget):
     def color(self):
         v = self.value
         if v is None or self.warn is None:
-            return QColor(P["ACCENT"])
+            return QColor(self.base)
         return QColor(P["BAD"] if v >= self.bad else P["WARN"] if v >= self.warn else P["GOOD"])
 
     def paintEvent(self, _):
@@ -246,11 +239,13 @@ class Tile(QWidget):
             p.setPen(QPen(c, 1.6))
             p.drawPath(path)
         f = QFont()
-        f.setPointSizeF(8.5)
+        f.setPointSizeF(7.5)
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1)
         p.setFont(f)
         p.setPen(QColor(P["MUTED"]))
-        p.drawText(0, 13, self.name)
-        f.setPointSizeF(19)
+        p.drawText(0, 13, self.name.upper())
+        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 0)
+        f.setPointSizeF(20)
         f.setBold(True)
         p.setFont(f)
         p.setPen(col)
@@ -289,11 +284,11 @@ class CoreBars(QWidget):
                 r = QRectF(bar_x, y + 2 + i * 10, bar_w, 7)
                 p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(QColor(P["OFF"]))
-                p.drawRoundedRect(r, 3, 3)
+                p.drawRect(r)
                 if on and i < len(th):
                     u = self.threads.get(str(th[i]), self.threads.get(th[i], 0))
                     p.setBrush(QColor(P["BAD"] if u > 90 else P["WARN"] if u > 70 else P["ACCENT"]))
-                    p.drawRoundedRect(QRectF(bar_x, y + 2 + i * 10, max(2, bar_w * u / 100), 7), 3, 3)
+                    p.drawRect(QRectF(bar_x, y + 2 + i * 10, max(2, bar_w * u / 100), 7))
             p.setPen(QColor(P["MUTED"] if on else P["DIM"]))
             if on:
                 fr = max((self.freq.get(str(t), self.freq.get(t, 0)) for t in th), default=0)
@@ -337,8 +332,8 @@ class CuGrid(QWidget):
                 for cu in range(2):
                     x = 56 + wgp * (2 * cell + 3 * gap) + cu * (cell + gap)
                     p.setPen(Qt.PenStyle.NoPen)
-                    p.setBrush(QColor(P["GOOD"] if on else P["OFF"]))
-                    p.drawRoundedRect(QRectF(x, y, cell, cell), 3, 3)
+                    p.setBrush(QColor(P["CYAN"] if on else P["OFF"]))
+                    p.drawRect(QRectF(x, y, cell, cell))
         p.end()
 
 
@@ -433,8 +428,8 @@ class Dashboard:
         tiles.setSpacing(12)
         self.t = {
             "cpu_temp": Tile("CPU", "°C", 100, 80, 90), "gpu_temp": Tile("GPU", "°C", 100, 75, 85),
-            "gpu_clk": Tile(T("Clock GPU"), "MHz", 2100), "gpu_busy": Tile(T("Carico GPU"), "%", 100),
-            "power": Tile(T("Consumo SoC"), "W", 200), "fan": Tile(T("Ventola"), "rpm", 3000),
+            "gpu_clk": Tile(T("Clock GPU"), "MHz", 2100, color=P["CYAN"]), "gpu_busy": Tile(T("Carico GPU"), "%", 100, color=P["TEXT"]),
+            "power": Tile(T("Consumo SoC"), "W", 200, color=P["TEXT"]), "fan": Tile(T("Ventola"), "rpm", 3000, color=P["TEXT"]),
         }
         for i, t in enumerate(self.t.values()):
             c = Card()
@@ -545,13 +540,28 @@ def limit_combo(value, allow_none_label=None):
     return c
 
 
-class GamesPage:
+def other_flatpaks():
+    """App Flatpak che sembrano giochi o launcher (oltre a quelle note), per la compatibilità OpenGL."""
+    try:
+        out = subprocess.run(["flatpak", "list", "--app", "--columns=application"], capture_output=True,
+                             text=True, timeout=10).stdout.split()
+    except Exception:
+        return []
+    games = ("game", "minecraft", "prism", "retroarch", "dolphin-emu", "pcsx", "ppsspp", "heroic",
+             "lutris", "bottles", "hypixel", "openttd", "supertux", "xonotic", "veloren", "luanti")
+    return sorted(a for a in out if a not in FLATPAK_GL_APPS and any(g in a.lower() for g in games))
+
+
+class FpsPage:
+    """Limite FPS globale, motore, upscaling con gamescope e MangoHud."""
+
     def __init__(self, win):
         self.win = win
-        self.w, lay = page(T("Giochi e FPS"), T("Il motore BC-250 conta gli FPS e applica il limite direttamente "
-                           "dentro i giochi, al posto di MangoHud. Le modifiche valgono subito, anche a gioco aperto."))
+        self.w, lay = page(T("FPS e upscaling"), T("Il motore BC-250 misura gli FPS e applica il limite direttamente "
+                           "dentro i giochi. Un limite FPS è il modo più semplice per avere meno calore e meno rumore: "
+                           "la scheda lavora solo quanto serve. Le modifiche valgono subito, anche a gioco aperto."))
         cfg = common.load_config()
-        c = Card(T("Limite FPS"))
+        c = Card(T("Limite FPS"), T("Vale per tutti i giochi. Un gioco con un profilo usa il limite del suo profilo."))
         self.enabled = QCheckBox()
         self.enabled.setChecked(cfg["engine"]["limit_enabled"])
         self.enabled.toggled.connect(self.save)
@@ -567,39 +577,19 @@ class GamesPage:
         c.lay.addWidget(row(T("Motore FPS attivo"), self.engine, T("Se lo spegni il gioco non viene più misurato né limitato.")))
         lay.addWidget(c)
 
-        self.live = label("", 10, wrap=True)
-        lc = Card(T("Giochi in esecuzione"))
-        lc.lay.addWidget(self.live)
-        lay.addWidget(lc)
-
-        gl = Card(T("Giochi OpenGL"), T("I giochi Vulkan e Proton (quasi tutti quelli Steam) sono coperti in automatico. "
-                  "Quelli OpenGL vanno attivati uno per uno."))
-        for app in FLATPAK_GL_APPS + self.other_flatpaks():
-            cb = QCheckBox()
-            cb.setChecked(flatpak_gl_enabled(app))
-            cb.toggled.connect(lambda on, a=app: (flatpak_gl(a, on), win.toast(T("{a}: riavvia l'app per applicare.", a=a))))
-            gl.lay.addWidget(row(app, cb, T("App Flatpak — vale dal prossimo avvio.")))
-        steam = QLineEdit("bc250-gl %command%")
-        steam.setReadOnly(True)
-        steam.setMinimumWidth(220)
-        gl.lay.addWidget(row(T("Giochi Steam OpenGL nativi"), steam,
-                             T("Copia questo testo in Proprietà → Opzioni di avvio del gioco.")))
-        lay.addWidget(gl)
-
-        up = Card(T("Lanciatore e upscaling"), T("Con «bc250-run %command%» nelle opzioni di avvio, il profilo del gioco "
-                  "può farlo girare a risoluzione ridotta ingrandita con FSR 1 (gamescope): più FPS e meno calore, "
-                  "con qualsiasi gioco. Senza upscaling nel profilo il gioco parte normalmente."))
-        run = QLineEdit("bc250-run %command%")
-        run.setReadOnly(True)
-        run.setMinimumWidth(220)
-        up.lay.addWidget(row(T("Opzioni di avvio (tutti i giochi)"), run,
-                             T("Steam: Proprietà → Opzioni di avvio. Lutris/Heroic: «prefisso del comando» = bc250-run.")))
-        up.lay.addWidget(label(T("Scegli l'upscaling nel profilo del gioco (Profili o Shift+F2): 77% ultra qualità, "
-                                 "67% qualità, 59% bilanciato, 50% prestazioni. Vale dal prossimo avvio."),
-                               8.5, P["DIM"], wrap=True))
+        up = Card(T("Upscaling FSR (gamescope)"), T("Il gioco gira a una risoluzione più bassa e viene ingrandito con "
+                  "FSR 1 fino a quella del monitor: più FPS e meno calore, con qualsiasi gioco."))
+        up.lay.addWidget(label("<br>".join("• " + T(t) for t in (
+            "Si sceglie per ogni gioco nel suo profilo (pagina Profili o Shift+F2 in gioco): 77% ultra qualità, "
+            "67% qualità, 59% bilanciato, 50% prestazioni.",
+            "Funziona solo con i giochi collegati (pagina Giochi), perché passa da bc250-run all'avvio.",
+            "Vale dal prossimo avvio del gioco. Senza upscaling nel profilo il gioco parte normalmente.",
+            "Se il gioco ha già FSR o DLSS nelle sue impostazioni, di solito conviene usare quello.")),
+            9.5, P["MUTED"], wrap=True))
         lay.addWidget(up)
 
-        mh = Card("MangoHud")
+        mh = Card("MangoHud", T("Il vecchio overlay per FPS e limiti. Il motore BC-250 lo sostituisce: tenerli "
+                                "entrambi attivi raddoppia il lavoro e può confondere il limite FPS."))
         self.mh = label("", 9.5, P["MUTED"], wrap=True)
         mh.lay.addWidget(self.mh)
         self.mh_btn = QCheckBox()
@@ -609,17 +599,6 @@ class GamesPage:
                              T("Resta installato: puoi riattivarlo qui. Vale dal prossimo accesso alla sessione.")))
         lay.addWidget(mh)
         lay.addStretch()
-
-    @staticmethod
-    def other_flatpaks():
-        try:
-            out = subprocess.run(["flatpak", "list", "--app", "--columns=application"], capture_output=True,
-                                 text=True, timeout=10).stdout.split()
-        except Exception:
-            return []
-        games = ("game", "minecraft", "prism", "retroarch", "dolphin-emu", "pcsx", "ppsspp", "heroic",
-                 "lutris", "bottles", "hypixel", "openttd", "supertux", "xonotic", "veloren", "luanti")
-        return sorted(a for a in out if a not in FLATPAK_GL_APPS and any(g in a.lower() for g in games))
 
     def save(self, *_):
         lim = self.limit.currentData()
@@ -638,16 +617,6 @@ class GamesPage:
         self.win.toast(T("Salvato: vale dal prossimo accesso alla sessione."))
 
     def refresh(self, st):
-        gs = st.get("games") or []
-        g = st.get("game")
-        if gs:
-            self.live.setText("<br>".join(
-                f"<b>{x['name']}</b> <span style='color:{P['MUTED']}'>{x['api']}</span> — {x['fps']:.0f} FPS"
-                + (" · " + T("limite applicato <b>{v}</b>", v=g["limit"])
-                   if g and g['name'] == x['name'] and g.get('limit') else "")
-                for x in gs))
-        else:
-            self.live.setText(f"<span style='color:{P['MUTED']}'>{T('Nessun gioco sta disegnando frame.')}</span>")
         mh = health.mangohud_global() if int(time.time()) % 10 == 0 or not self.mh.text() else None
         if mh is not None:
             self.mh.setText(T("MangoHud è ancora caricato nella sessione attuale.") if mh
@@ -666,6 +635,11 @@ class LibraryPage:
                                           "(anche fuori da Steam, per esempio da uno script o da distrobox). Spunta un "
                                           "gioco per collegarlo: parte con bc250-run e può usare il profilo e "
                                           "l'upscaling FSR."))
+        self.live = label("", 10, wrap=True)
+        lc = Card(T("In esecuzione adesso"), T("I giochi che stanno disegnando frame, con il limite FPS applicato."))
+        lc.lay.addWidget(self.live)
+        lay.addWidget(lc)
+
         top = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setPlaceholderText(T("Cerca un gioco…"))
@@ -711,6 +685,30 @@ class LibraryPage:
                              T("Nessuna notifica durante il gioco: i nuovi compaiono qui, con il numero accanto a "
                                "«Giochi» nel menu.")))
         lay.addWidget(mc)
+
+        hand = Card(T("Collegare un gioco a mano"), T("Per i giochi che la lista non trova, o se preferisci farlo tu: "
+                    "copia il testo nelle opzioni di avvio del gioco."))
+        run = QLineEdit("bc250-run %command%")
+        run.setReadOnly(True)
+        run.setMinimumWidth(220)
+        hand.lay.addWidget(row(T("Opzioni di avvio"), run,
+                               T("Steam: Proprietà → Opzioni di avvio. Lutris/Heroic: «prefisso del comando» = bc250-run.")))
+        lay.addWidget(hand)
+
+        gl = Card(T("Compatibilità OpenGL"), T("I giochi Vulkan e Proton (quasi tutti quelli Steam) sono misurati in "
+                  "automatico. I pochi giochi OpenGL vanno attivati uno per uno, altrimenti non vedi i loro FPS "
+                  "e il limite non si applica."))
+        for app in FLATPAK_GL_APPS + other_flatpaks():
+            cb = QCheckBox()
+            cb.setChecked(flatpak_gl_enabled(app))
+            cb.toggled.connect(lambda on, a=app: (flatpak_gl(a, on), win.toast(T("{a}: riavvia l'app per applicare.", a=a))))
+            gl.lay.addWidget(row(app, cb, T("App Flatpak — vale dal prossimo avvio.")))
+        steam = QLineEdit("bc250-gl %command%")
+        steam.setReadOnly(True)
+        steam.setMinimumWidth(220)
+        gl.lay.addWidget(row(T("Giochi Steam OpenGL nativi"), steam,
+                             T("Copia questo testo in Proprietà → Opzioni di avvio del gioco.")))
+        lay.addWidget(gl)
         lay.addStretch()
         self.launch_result = None
         self.known = {}
@@ -835,9 +833,17 @@ class LibraryPage:
         threading.Thread(target=work, daemon=True).start()
         self.wait_result()
 
-
     def refresh(self, st):
-        pass
+        gs = st.get("games") or []
+        g = st.get("game")
+        if gs:
+            self.live.setText("<br>".join(
+                f"<b>{x['name']}</b> <span style='color:{P['MUTED']}'>{x['api']}</span> — {x['fps']:.0f} FPS"
+                + (" · " + T("limite applicato <b>{v}</b>", v=g["limit"])
+                   if g and g['name'] == x['name'] and g.get('limit') else "")
+                for x in gs))
+        else:
+            self.live.setText(f"<span style='color:{P['MUTED']}'>{T('Nessun gioco sta disegnando frame.')}</span>")
 
 
 class ProfilesPage:
@@ -848,7 +854,8 @@ class ProfilesPage:
         self.w, lay = page(T("Profili per gioco"), T("Quando un gioco parte, il suo profilo imposta limite FPS, clock GPU, "
                            "VRR, protezione calore e overlay. Alla chiusura torna tutto normale. "
                            "Puoi modificarli anche in gioco con Shift+F2."))
-        c = Card()
+        c = Card(T("I tuoi profili"), T("Una riga per gioco. «Salva» rende effettive le modifiche: se il gioco è "
+                                        "aperto valgono subito, tranne l'upscaling (dal prossimo avvio)."))
         self.table = QTableWidget(0, len(self.COLS))
         self.table.setHorizontalHeaderLabels([T(c) for c in self.COLS])
         hh = self.table.horizontalHeader()
@@ -859,9 +866,6 @@ class ProfilesPage:
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         c.lay.addWidget(self.table)
-        c.lay.addWidget(label(T("Protezione calore: se la CPU supera la soglia, il limite FPS scende di 10 ogni 20 s; "
-                                "quando torna 8°C sotto, risale. VRR: su molti monitor, all'avvio e alla chiusura del "
-                                "gioco lo schermo diventa nero per un attimo."), 8.5, P["DIM"], wrap=True))
         btns = QHBoxLayout()
         for text, fn, obj in (("Aggiungi", self.add, None), ("Dal gioco in corso", self.add_current, None),
                               ("Elimina", self.delete, "danger"), ("Salva", self.save, "primary")):
@@ -873,22 +877,27 @@ class ProfilesPage:
         btns.addStretch()
         c.lay.addLayout(btns)
         lay.addWidget(c)
-        d = Card(T("Clock GPU normale (senza profilo)"))
-        cfg = common.load_config()
-        self.gmin, self.gmax = QSpinBox(), QSpinBox()
-        for sb, v in ((self.gmin, cfg["gpu_default"]["min"]), (self.gmax, cfg["gpu_default"]["max"])):
-            sb.setRange(500, 2000)
-            sb.setSingleStep(25)
-            sb.setSuffix(" MHz")
-            sb.setValue(v)
-        d.lay.addWidget(row(T("Minimo"), self.gmin))
-        d.lay.addWidget(row(T("Massimo"), self.gmax, T("Più alto = più FPS ma più calore. Il governor taglia comunque "
-                            "a 85°C. Con una sola ventola, 1750 è un buon compromesso.")))
-        b = QPushButton(T("Applica"))
-        b.setObjectName("primary")
-        b.clicked.connect(self.apply_default)
-        d.lay.addWidget(b, 0, Qt.AlignmentFlag.AlignRight)
-        lay.addWidget(d)
+
+        h = Card(T("Cosa fa ogni colonna"))
+        h.lay.addWidget(label("<br>".join(
+            f"<b style='color:{P['TEXT']}'>{T(k)}</b> — {T(v)}" for k, v in (
+                ("Riconosci", "come trovare il gioco: il nome del processo (per esempio HytaleClient) oppure "
+                              "appid:NUMERO per Steam. «Dal gioco in corso» lo compila da solo."),
+                ("Limite FPS", "«globale» usa il limite della pagina FPS e upscaling, «nessuno» lo toglie."),
+                ("Clock GPU max", "tetto del clock GPU mentre il gioco è aperto. Più basso = meno calore, "
+                                  "spesso senza perdere FPS nei giochi leggeri o già limitati."),
+                ("VRR", "accende FreeSync solo per questo gioco. Su molti monitor lo schermo diventa nero per un "
+                        "attimo all'avvio e alla chiusura."),
+                ("Protezione calore", "se la CPU supera la soglia, il limite FPS scende di 10 ogni 20 s; "
+                                      "risale quando la CPU torna 8°C sotto."),
+                ("Overlay, Posizione overlay, Stile overlay", "cambiano l'overlay solo per questo gioco, "
+                                                               "al posto delle impostazioni della pagina Overlay."),
+                ("Upscaling FSR", "risoluzione ridotta e ingrandita con FSR 1. Serve il gioco collegato "
+                                  "(pagina Giochi); vale dal prossimo avvio."),
+                ("Frequenza CPU max", "tetto di frequenza della CPU mentre il gioco è aperto: «globale» usa quello "
+                                      "della pagina Scheda. Serve cpufreq (pagina Scheda)."))
+        ), 9.5, P["MUTED"], wrap=True))
+        lay.addWidget(h)
         lay.addStretch()
         self.extra = []  # campi del profilo non mostrati in tabella, da conservare
         self.load()
@@ -965,6 +974,66 @@ class ProfilesPage:
         common.update_config(lambda c: c.update(profiles=profs))
         self.win.toast(T("{n} profili salvati.", n=len(profs)))
 
+    def refresh(self, st):
+        pass
+
+
+class BoardPage:
+    """La scheda: clock GPU senza profilo, stato del governor e della CPU (solo lettura da sysfs)."""
+
+    def __init__(self, win):
+        self.win = win
+        self.w, lay = page(T("Scheda"), T("Come lavorano GPU e CPU quando nessun profilo dice altro. Sulla BC-250 il "
+                           "limite vero è il raffreddamento: meno clock vuol dire meno calore."))
+        d = Card(T("Clock GPU"), T("Il governor alza e abbassa il clock in base al carico, dentro questo intervallo. "
+                                   "Un profilo può usare un massimo diverso per il suo gioco."))
+        cfg = common.load_config()
+        self.gmin, self.gmax = QSpinBox(), QSpinBox()
+        for sb, v in ((self.gmin, cfg["gpu_default"]["min"]), (self.gmax, cfg["gpu_default"]["max"])):
+            sb.setRange(500, 2000)
+            sb.setSingleStep(25)
+            sb.setSuffix(" MHz")
+            sb.setValue(v)
+        d.lay.addWidget(row(T("Minimo"), self.gmin, T("Il clock a riposo.")))
+        d.lay.addWidget(row(T("Massimo"), self.gmax, T("Più alto = più FPS ma più calore. Il governor taglia comunque "
+                            "a 85°C. Con una sola ventola, 1750 è un buon compromesso.")))
+        b = QPushButton(T("Applica"))
+        b.setObjectName("primary")
+        b.clicked.connect(self.apply_default)
+        d.lay.addWidget(b, 0, Qt.AlignmentFlag.AlignRight)
+        lay.addWidget(d)
+
+        g = Card(T("Governor GPU"), T("Il servizio che regola il clock della GPU. Sopra la soglia di taglio scende "
+                                      "al minimo finché la GPU non torna alla temperatura di ripresa."))
+        self.gov = label("", 10, wrap=True)
+        g.lay.addWidget(self.gov)
+        lay.addWidget(g)
+
+        c = Card(T("CPU"), T("Nei giochi che scaldano molto la CPU (per esempio Cyberpunk) un tetto di frequenza "
+                             "toglie molti gradi perdendo pochi FPS. Un profilo può usare un tetto diverso."))
+        self.cpu = label("", 10, wrap=True)
+        c.lay.addWidget(self.cpu)
+        info = common.cpufreq_info()
+        self.cpumax = QComboBox()
+        self.cpumax.addItem(T("Nessun limite"), None)
+        for mhz in (info or {}).get("steps", [])[1:]:
+            self.cpumax.addItem(f"{mhz} MHz", mhz)
+        cur = (cfg.get("cpu") or {}).get("max_mhz")
+        self.cpumax.setCurrentIndex(max(0, self.cpumax.findData(cur)))
+        self.cpumax.setEnabled(bool(info))
+        self.cpumax.activated.connect(self.save_cpu)
+        c.lay.addWidget(row(T("Frequenza CPU massima"), self.cpumax,
+                            T("2550 MHz è il punto consigliato dalle misure della community: molto meno calore, "
+                              "prestazioni quasi uguali.") if info else
+                            T("Non disponibile: manca il driver cpufreq (vedi docs/cpu.md).")))
+        lay.addWidget(c)
+        lay.addStretch()
+
+    def save_cpu(self, *_):
+        mhz = self.cpumax.currentData()
+        common.update_config(lambda c: c.setdefault("cpu", {}).update(max_mhz=mhz))
+        self.win.toast(T("Frequenza CPU massima: {v}", v=f"{mhz} MHz" if mhz else T("nessun limite")))
+
     def apply_default(self):
         mn, mx = self.gmin.value(), self.gmax.value()
         if mn > mx:
@@ -973,8 +1042,51 @@ class ProfilesPage:
         ok = governor_set(mn, mx)
         self.win.toast(T("Clock GPU {a}–{b} MHz", a=mn, b=mx) + ("" if ok else " " + T("(governor non raggiungibile!)")))
 
+    @staticmethod
+    def read(path):
+        try:
+            with open(path) as f:
+                return f.read().strip()
+        except OSError:
+            return None
+
     def refresh(self, st):
-        pass
+        g = st.get("governor") or {}
+        m = P["MUTED"]
+        self.gov.setText("<br>".join([
+            f"<span style='color:{m}'>{T('Intervallo attuale')}</span> <b>{g.get('min') or '?'}–{g.get('max') or '?'} MHz</b>",
+            f"<span style='color:{m}'>{T('Taglio a')}</span> <b>{g.get('throttle') or '?'}°C</b> "
+            f"<span style='color:{m}'>{T('ripresa')}</span> <b>{g.get('recovery') or '?'}°C</b>",
+            f"<span style='color:{m}'>{T('Stato')}</span> <b style='color:{P['BAD'] if st.get('throttling') else P['GOOD']}'>"
+            f"{T('sta tagliando il clock') if st.get('throttling') else T('normale')}</b>"]))
+        s = st.get("sensors") or {}
+        idle = self.read("/sys/devices/system/cpu/cpuidle/current_driver")
+        freq = os.path.exists("/sys/devices/system/cpu/cpu0/cpufreq")
+        good, warn = P["GOOD"], P["WARN"]
+        idle_txt = (f"<b style='color:{good}'>{T('attivi')}</b> ({idle})" if idle and idle != "none"
+                    else f"<b style='color:{warn}'>{T('non attivi')}</b>")
+        cf = st.get("cpufreq") or common.cpufreq_info()
+        if freq and cf:
+            freq_txt = (f"<b style='color:{good}'>{T('attiva')}</b> ({cf['driver']}, "
+                        + T("ora al massimo {v} MHz", v=cf["max"]) + ")")
+            if not cf["writable"]:
+                freq_txt += f" · <b style='color:{warn}'>{T('il servizio bc250-cpufreq non è installato')}</b>"
+        else:
+            freq_txt = f"<b style='color:{warn}'>{T('non disponibile')}</b>"
+        nc = s.get("cores") or 0
+        self.cpu.setText("<br>".join([
+            f"<span style='color:{m}'>{T('Core')}</span> <b>{nc} / {s.get('threads') or 0} thread</b>"
+            + (" · " + T("sblocco 8 core attivo") if nc >= 8 else ""),
+            f"<span style='color:{m}'>{T('Stati di riposo (C-state)')}</span> {idle_txt}",
+            f"<span style='color:{m}'>{T('Regolazione frequenza (cpufreq)')}</span> {freq_txt}",
+            f"<span style='color:{P['DIM']}; font-size:9pt'>" + (
+                T("Senza C-state e cpufreq la CPU resta sempre alla frequenza massima. Il BIOS della BC-250 non li "
+                  "espone correttamente: la community ha un fix delle tabelle ACPI (vedi docs/cpu.md).")
+                if not freq else T("La frequenza CPU si può limitare: utile nei giochi che scaldano molto la CPU."))
+            + "</span>"]))
+        if cf and not self.cpumax.view().isVisible():
+            want = (common.load_config().get("cpu") or {}).get("max_mhz")
+            self.cpumax.setCurrentIndex(max(0, self.cpumax.findData(want)))
 
 
 ITEMS = [("fps", "FPS"), ("frametime", "Grafico frametime"), ("low1", "1% low"), ("cpu_temp", "Temperatura CPU"),
@@ -1079,7 +1191,21 @@ class OverlayPage:
         o = common.load_config()["overlay"]
         b = o["bubble"]
 
-        pc = Card(T("Anteprima"))
+        c = Card(T("Comandi in gioco"), T("Funzionano sopra qualsiasi gioco, anche a schermo intero."))
+        for keys, what in (("Shift+F1", "Accende e spegne il limite FPS."),
+                           ("Shift+F2", "Apre il pannello in basso: FPS, frametime, sensori e il profilo del gioco "
+                                        "da modificare con le frecce. Esc lo chiude."),
+                           ("Shift+F3", "Mostra o nasconde l'overlay.")):
+            c.lay.addWidget(label(f"<b>{keys}</b>&nbsp;&nbsp;<span style='color:{P['MUTED']}'>{T(what)}</span>",
+                                  10, wrap=True))
+        c.lay.addWidget(label(T("Si cambiano in Impostazioni di sistema → Scorciatoie → «BC-250»."), 8.5, P["DIM"]))
+        bt = QPushButton(T("Apri il pannello ora"))
+        bt.clicked.connect(lambda: common.overlay_send("toggle-panel"))
+        c.lay.addWidget(bt, 0, Qt.AlignmentFlag.AlignLeft)
+        lay.addWidget(c)
+
+        pc = Card(T("Anteprima"), T("Com'è l'overlay in gioco, a grandezza reale. Cambia le impostazioni qui sotto "
+                                    "e lo vedi subito."))
         self.scen = QComboBox()
         self.scen.addItem(T("Dati live (se stai giocando)"), "auto")
         for k, t in DEMOS:
@@ -1091,7 +1217,7 @@ class OverlayPage:
         pc.lay.addWidget(self.preview)
         lay.addWidget(pc)
 
-        a = Card(T("Aspetto"))
+        a = Card(T("Aspetto"), T("Stile, posizione e dimensione. Un profilo può cambiarli per il suo gioco."))
         self.visible = QCheckBox()
         self.visible.setChecked(o["hud_visible"])
         a.lay.addWidget(row(T("Overlay attivo"), self.visible, T("Shift+F3 lo accende e spegne anche in gioco.")))
@@ -1126,7 +1252,8 @@ class OverlayPage:
         a.lay.addWidget(row(T("Opacità sfondo"), self.opacity))
         lay.addWidget(a)
 
-        self.bcard = Card(T("Cerchio e anello"))
+        self.bcard = Card(T("Cerchio e anello"), T("Quando il cerchio si allarga per segnalare un problema, e con "
+                                                   "quali soglie. Vale anche per i colori dell'anello."))
         self.center = QComboBox()
         for k, t in CENTER:
             self.center.addItem(T(t), k)
@@ -1189,7 +1316,7 @@ class OverlayPage:
         lay.addWidget(self.icard)
 
         lk = {**LOOK_DEFAULT, **(o.get("look") or {})}
-        self.lcard = Card(T("Aspetto dei valori"))
+        self.lcard = Card(T("Aspetto dei valori"), T("Etichette, bordo e colori dei numeri nell'overlay."))
         self.labels, self.border, self.badge = QCheckBox(), QCheckBox(), QCheckBox()
         for cb, key, text, hint in (
                 (self.labels, "labels", "Etichette", "CPU, GPU, W… sotto o accanto ai numeri."),
@@ -1210,17 +1337,6 @@ class OverlayPage:
         self.accent.setCurrentIndex(max(0, self.accent.findData(lk["accent"])))
         self.lcard.lay.addWidget(row(T("Colore principale"), self.accent, T("Bordo, limite FPS e valori in monocromatico.")))
         lay.addWidget(self.lcard)
-
-        c = Card(T("Tasti rapidi"))
-        c.lay.addWidget(label(
-            f"<b>Shift+F1</b> <span style='color:{P['MUTED']}'>{T('limite FPS on/off')}</span> &nbsp;&nbsp; "
-            f"<b>Shift+F2</b> <span style='color:{P['MUTED']}'>{T('pannello dettagli')}</span> &nbsp;&nbsp; "
-            f"<b>Shift+F3</b> <span style='color:{P['MUTED']}'>{T('mostra/nascondi overlay')}</span>", 10))
-        c.lay.addWidget(label(T("Si cambiano in Impostazioni di sistema → Scorciatoie → «BC-250»."), 8.5, P["DIM"]))
-        bt = QPushButton(T("Apri pannello dettagli ora"))
-        bt.clicked.connect(lambda: common.overlay_send("toggle-panel"))
-        c.lay.addWidget(bt, 0, Qt.AlignmentFlag.AlignLeft)
-        lay.addWidget(c)
 
         for w in [self.visible, self.only, self.labels, self.border, self.badge] + list(self.watch.values()):
             w.toggled.connect(self.save)
@@ -1277,7 +1393,8 @@ class DisplayPage:
         self.win = win
         self.w, self.lay = page(T("Display"), T("VRR (FreeSync): il monitor si adatta agli FPS del gioco. "
                                 "Niente tearing e niente scatti anche sotto i 165 Hz. Funziona nei giochi a schermo intero."))
-        auto = Card(T("Automatico"))
+        auto = Card(T("Automatico"), T("Il modo consigliato: VRR acceso solo mentre giochi, così il desktop non "
+                                       "sfarfalla. Un profilo può accenderlo o no per il suo gioco."))
         self.games_only = QCheckBox()
         self.games_only.setChecked(common.load_config()["display"]["vrr_games_only"])
         self.games_only.toggled.connect(self.save_auto)
@@ -1301,7 +1418,8 @@ class DisplayPage:
             if it.widget():
                 it.widget().deleteLater()
         for o in health.vrr_outputs():
-            c = Card(T("Schermo {n} — {m} Hz", n=o['name'], m=o['mode']))
+            c = Card(T("Schermo {n} — {m} Hz", n=o['name'], m=o['mode']),
+                     T("Impostazioni manuali di questo monitor. KDE chiede conferma se la modalità non funziona."))
             vrr = QComboBox()
             for t, v in (("Mai", "never"), ("Automatico (giochi a schermo intero)", "automatic"), ("Sempre", "always")):
                 vrr.addItem(T(t), v)
@@ -1338,7 +1456,8 @@ class DisplayPage:
 class HealthPage:
     def __init__(self, win):
         self.win = win
-        self.w, self.lay = page(T("Salute"), T("Controlli per assicurarti che la BC-250 giri al meglio."))
+        self.w, self.lay = page(T("Salute e avvisi"), T("Controlli per assicurarti che la BC-250 giri al meglio, "
+                                "e gli avvisi quando qualcosa va storto."))
         b = QPushButton(T("Ricontrolla"))
         b.setObjectName("primary")
         b.clicked.connect(self.build)
@@ -1346,7 +1465,8 @@ class HealthPage:
         self.box = QVBoxLayout()
         self.box.setSpacing(8)
         self.lay.addLayout(self.box)
-        tips = Card(T("Consigli"))
+        self.lay.addWidget(self.alerts_card())
+        tips = Card(T("Consigli"), T("Cosa rende di più per temperature e FPS su questa scheda."))
         tips.lay.addWidget(label("<br>".join("• " + T(t) for t in (
             "La ventola è una sola e gira sempre al massimo: il limite vero è il raffreddamento. "
             "Una seconda ventola sul dissipatore o una più potente è l'upgrade che rende di più.",
@@ -1388,6 +1508,41 @@ class HealthPage:
         ok, msg = health.fix(cid)
         self.win.toast(msg if ok else T("Non riuscito: {m}", m=msg))
         QTimer.singleShot(1500, self.build)
+
+    def alerts_card(self):
+        a = common.load_config()["alerts"]
+        c = Card(T("Avvisi"), T("Notifica sul desktop e messaggio sopra il gioco quando una soglia viene superata."))
+        self.en = QCheckBox()
+        self.en.setChecked(a["enabled"])
+        c.lay.addWidget(row(T("Avvisi attivi"), self.en))
+        self.cpu, self.gpu, self.fan, self.cool = QSpinBox(), QSpinBox(), QSpinBox(), QSpinBox()
+        for sb, rng, suf, v in ((self.cpu, (60, 100), " °C", a["cpu_temp"]), (self.gpu, (60, 100), " °C", a["gpu_temp"]),
+                                (self.fan, (0, 3000), " rpm", a["fan_min_rpm"]),
+                                (self.cool, (30, 3600), " s", a["cooldown_s"])):
+            sb.setRange(*rng)
+            sb.setSuffix(suf)
+            sb.setValue(int(v))
+        c.lay.addWidget(row(T("CPU oltre"), self.cpu, T("La CPU (Zen 2) è al limite a 97°C.")))
+        c.lay.addWidget(row(T("GPU oltre"), self.gpu, T("Il governor taglia il clock a 85°C.")))
+        c.lay.addWidget(row(T("Ventola sotto"), self.fan, T("La ventola di serie gira a circa 1000 rpm: sotto questa soglia è ferma o guasta.")))
+        c.lay.addWidget(row(T("Non ripetere prima di"), self.cool, T("Lo stesso avviso non torna prima di questo tempo.")))
+        btns = QHBoxLayout()
+        t = QPushButton(T("Prova una notifica"))
+        t.clicked.connect(lambda: subprocess.Popen(["notify-send", "-a", "BC-250", "BC-250", T("Le notifiche funzionano.")]))
+        btns.addWidget(t)
+        btns.addStretch()
+        s = QPushButton(T("Salva"))
+        s.setObjectName("primary")
+        s.clicked.connect(self.save_alerts)
+        btns.addWidget(s)
+        c.lay.addLayout(btns)
+        return c
+
+    def save_alerts(self):
+        common.update_config(lambda c: c["alerts"].update(
+            enabled=self.en.isChecked(), cpu_temp=self.cpu.value(), gpu_temp=self.gpu.value(),
+            fan_min_rpm=self.fan.value(), cooldown_s=self.cool.value()))
+        self.win.toast(T("Avvisi salvati."))
 
     def refresh(self, st):
         pass
@@ -1611,53 +1766,20 @@ class HistoryPage:
         pass
 
 
-class AlertsPage:
-    def __init__(self, win):
-        self.win = win
-        self.w, lay = page(T("Avvisi"), T("Notifica sul desktop e messaggio sopra il gioco quando qualcosa va storto."))
-        a = common.load_config()["alerts"]
-        c = Card()
-        self.en = QCheckBox()
-        self.en.setChecked(a["enabled"])
-        c.lay.addWidget(row(T("Avvisi attivi"), self.en))
-        self.cpu, self.gpu, self.fan, self.cool = QSpinBox(), QSpinBox(), QSpinBox(), QSpinBox()
-        for sb, rng, suf, v in ((self.cpu, (60, 100), " °C", a["cpu_temp"]), (self.gpu, (60, 100), " °C", a["gpu_temp"]),
-                                (self.fan, (0, 3000), " rpm", a["fan_min_rpm"]),
-                                (self.cool, (30, 3600), " s", a["cooldown_s"])):
-            sb.setRange(*rng)
-            sb.setSuffix(suf)
-            sb.setValue(int(v))
-        c.lay.addWidget(row(T("CPU oltre"), self.cpu, T("La CPU (Zen 2) è al limite a 97°C.")))
-        c.lay.addWidget(row(T("GPU oltre"), self.gpu, T("Il governor taglia il clock a 85°C.")))
-        c.lay.addWidget(row(T("Ventola sotto"), self.fan, T("La ventola di serie gira a circa 1000 rpm: sotto questa soglia è ferma o guasta.")))
-        c.lay.addWidget(row(T("Non ripetere prima di"), self.cool))
-        b = QPushButton(T("Salva"))
-        b.setObjectName("primary")
-        b.clicked.connect(self.save)
-        c.lay.addWidget(b, 0, Qt.AlignmentFlag.AlignRight)
-        lay.addWidget(c)
-        t = QPushButton(T("Prova una notifica"))
-        t.clicked.connect(lambda: subprocess.Popen(["notify-send", "-a", "BC-250", "BC-250", T("Le notifiche funzionano.")]))
-        lay.addWidget(t, 0, Qt.AlignmentFlag.AlignLeft)
-        lay.addStretch()
-
-    def save(self):
-        common.update_config(lambda c: c["alerts"].update(
-            enabled=self.en.isChecked(), cpu_temp=self.cpu.value(), gpu_temp=self.gpu.value(),
-            fan_min_rpm=self.fan.value(), cooldown_s=self.cool.value()))
-        self.win.toast(T("Avvisi salvati."))
-
-    def refresh(self, st):
-        pass
-
-
 # ---------------------------------------------------------------- finestra
 class Main(QWidget):
-    PAGES = [("Panoramica", "utilities-system-monitor", Dashboard), ("Giochi", "applications-games", LibraryPage),
-             ("FPS e motore", "speedometer", GamesPage),
-             ("Profili", "view-list-details", ProfilesPage), ("Overlay", "view-visible", OverlayPage),
-             ("Display", "video-display", DisplayPage), ("Salute", "security-high", HealthPage),
-             ("Storico", "view-history", HistoryPage), ("Avvisi", "dialog-warning", AlertsPage)]
+    # menu a gruppi: (gruppo, [(chiave, nome, classe)]); la chiave serve a --page e ai collegamenti interni
+    GROUPS = [("Monitoraggio", [("overview", "Panoramica", Dashboard), ("history", "Storico", HistoryPage)]),
+              ("Giochi", [("games", "Giochi", LibraryPage), ("profiles", "Profili", ProfilesPage),
+                          ("overlay", "Overlay", OverlayPage)]),
+              ("Prestazioni", [("fps", "FPS e upscaling", FpsPage), ("board", "Scheda", BoardPage),
+                               ("display", "Display", DisplayPage)]),
+              ("Sistema", [("health", "Salute e avvisi", HealthPage)])]
+    PAGES = [p for _g, ps in GROUPS for p in ps]
+
+    @classmethod
+    def page_index(cls, key):
+        return next(i for i, p in enumerate(cls.PAGES) if p[0] == key)
 
     def __init__(self):
         super().__init__()
@@ -1686,11 +1808,14 @@ class Main(QWidget):
         side.setStyleSheet(f"background:{P['SIDEBAR']};")
         sl = QVBoxLayout(side)
         sl.setContentsMargins(0, 18, 0, 12)
-        brand = label("BC-250", 15, bold=True)
+        brand = label("BC-250", 17, P["ACCENT"], bold=True)
+        brand.setFont(display_font(17))
+        brand.setStyleSheet(f"color:{P['ACCENT']}; font-family:'{DISPLAY}'; font-size:17pt; font-weight:bold;")
         brand.setContentsMargins(20, 0, 0, 0)
         sl.addWidget(brand)
-        sub = label("Control Center", 9, P["MUTED"])
-        sub.setContentsMargins(20, 0, 0, 8)
+        sub = label("CONTROL CENTER · v" + __version__, 7.5, P["DIM"])
+        sub.setStyleSheet(f"color:{P['DIM']}; font-size:7.5pt; letter-spacing:1px;")
+        sub.setContentsMargins(20, 2, 0, 12)
         sl.addWidget(sub)
         self.find = QLineEdit()
         self.find.setObjectName("find")
@@ -1746,14 +1871,32 @@ class Main(QWidget):
         self.side, self.content = side, content
 
         self.pages = []
-        for name, icon, cls in self.PAGES:
-            it = QListWidgetItem(nav_icon(icon), T(name))
-            self.nav.addItem(it)
-            pg = cls(self)
-            self.pages.append(pg)
-            self.stack.addWidget(pg.w)
-        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
-        self.nav.setCurrentRow(current)
+        self.page_row = {}   # indice pagina -> riga del menu (le intestazioni dei gruppi occupano righe)
+        hf = QFont(font(7))
+        hf.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.5)
+        for group, entries in self.GROUPS:
+            head = QListWidgetItem(T(group).upper())
+            head.setFlags(Qt.ItemFlag.NoItemFlags)
+            head.setFont(hf)
+            head.setForeground(QColor(P["DIM"]))
+            head.setSizeHint(QSize(0, 34))
+            self.nav.addItem(head)
+            for _key, _name, cls in entries:
+                self.page_row[len(self.pages)] = self.nav.count()
+                self.nav.addItem(QListWidgetItem(self.nav_label(len(self.pages))))
+                pg = cls(self)
+                self.pages.append(pg)
+                self.stack.addWidget(pg.w)
+        rows = {r: i for i, r in self.page_row.items()}
+        self.nav.currentRowChanged.connect(lambda r: r in rows and self.stack.setCurrentIndex(rows[r]))
+        self.show_page(current)
+
+    def show_page(self, i):
+        self.nav.setCurrentRow(self.page_row.get(i, self.page_row[0]))
+
+    def nav_label(self, i):
+        """Voce del menu in stile cockpit: «01  PANORAMICA»."""
+        return f"{i + 1:02d}  {T(self.PAGES[i][1]).upper()}"
 
     def on_lang(self, *_):
         code = self.lang.currentData()
@@ -1765,7 +1908,7 @@ class Main(QWidget):
         QTimer.singleShot(0, self.rebuild)
 
     def rebuild(self):
-        cur = max(0, self.nav.currentRow())
+        cur = max(0, self.stack.currentIndex())
         self.toast_timer.stop()
         for w in (self.side, self.content):
             self.root.removeWidget(w)
@@ -1781,7 +1924,7 @@ class Main(QWidget):
             return
         self.find_built = time.time()
         idx = {}
-        for i, (name, _icon, _cls) in enumerate(self.PAGES):
+        for i, (_key, name, _cls) in enumerate(self.PAGES):
             pname = T(name)
             idx[f"{pname}"] = (i, None, None)
             root = self.pages[i].w
@@ -1794,7 +1937,7 @@ class Main(QWidget):
         try:
             from . import launchers
             for k, g in launchers.load_known().items():
-                idx[f"🎮 {g.get('name', k)}  —  {T('Giochi')}"] = (1, None, g.get("name", k))
+                idx[f"🎮 {g.get('name', k)}  —  {T('Giochi')}"] = (self.page_index("games"), None, g.get("name", k))
         except Exception:
             pass
         self.find_index = idx
@@ -1809,9 +1952,9 @@ class Main(QWidget):
         if not hit:
             return
         i, wdg, game = hit
-        self.nav.setCurrentRow(i)
+        self.show_page(i)
         if game is not None:
-            self.pages[1].search.setText(game)
+            self.pages[i].search.setText(game)
             return
         if wdg is not None:
             area = self.pages[i].w
@@ -1835,12 +1978,13 @@ class Main(QWidget):
             return
         self._known_m = m
         n = len(launchers.pending())
-        it = self.nav.item(1)
+        gi = self.page_index("games")
+        it = self.nav.item(self.page_row[gi])
         if it:
-            it.setText(T("Giochi") + (f"   ● {n}" if n else ""))
-            it.setForeground(QColor(P["WARN"]) if n else QColor(P["MUTED"]))
-        if n and self.stack.currentIndex() == 1:
-            self.pages[1].load_games()
+            it.setText(self.nav_label(gi) + (f"   {n}" if n else ""))
+            it.setForeground(QColor(P["ACCENT"]) if n else QColor(P["MUTED"]))
+        if n and self.stack.currentIndex() == gi:
+            self.pages[gi].load_games()
 
     def toast(self, text):
         self.toast_l.setText(text)
@@ -1866,11 +2010,16 @@ def main():
     app = QApplication(sys.argv)
     # Fusion: stesso aspetto su ogni desktop (Breeze rendeva trasparenti i menu a tendina)
     app.setStyle("Fusion")
+    load_fonts()
+    app.setFont(font(10))
     app.setApplicationName("bc250-control")
     app.setDesktopFileName("bc250-control")
     w = Main()
     if "--page" in sys.argv:
-        w.nav.setCurrentRow(int(sys.argv[sys.argv.index("--page") + 1]))
+        # numero (01 = 1, come nel menu) o nome: --page games, --page fps, …
+        arg = sys.argv[sys.argv.index("--page") + 1]
+        keys = [p[0] for p in Main.PAGES]
+        w.show_page(int(arg) - 1 if arg.isdigit() else keys.index(arg) if arg in keys else 0)
     w.show()
     sys.exit(app.exec())
 

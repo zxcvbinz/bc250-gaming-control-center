@@ -22,6 +22,7 @@ After updating the app, reconnect the server in your client (`/mcp` in Claude Co
 | `get_session` | `id`, `points` (60) | full session: summary, **parts** (continuous stretches split by alt+tab/pauses over 20 s), marks, per-mark segments, timeline. Old ids of merged sessions resolve to the merged session, with a `note` |
 | `mark` | `note` | adds a mark to the running session ("shadows low", "limit 75") |
 | `set_fps_limit` | `limit`, `profile` (optional) | changes the FPS limit live, globally or for a profile. `0` removes it |
+| `set_cpu_max` | `max`, `save` | sets the CPU frequency cap live (MHz, `0` = no cap); `save=true` stores it as the global cap. Needs cpufreq |
 | `set_gpu_clock` | `max`, `min` | changes the governor range live (temporary: a profile or game change resets it) |
 | `list_profiles` | – | all game profiles |
 | `save_profile` | `name` + any profile field | creates or updates a profile (see [Profiles](profiles.md)) |
