@@ -14,9 +14,9 @@ from collections import deque
 from PyQt6.QtCore import QRectF, QSize, QStringListModel, Qt, QTimer
 from PyQt6.QtGui import QColor, QFont, QIcon, QPixmap, QTextDocument, QLinearGradient, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QCompleter, QFrame,
-                             QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+                             QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                              QListWidget, QListWidgetItem, QMessageBox, QPushButton, QScrollArea,
-                             QSizePolicy, QSlider, QSpinBox, QStackedWidget, QTableWidget, QTableWidgetItem, QTreeWidget, QTreeWidgetItem,
+                             QSizePolicy, QSlider, QSpinBox, QStackedWidget, QTreeWidget, QTreeWidgetItem,
                              QVBoxLayout, QWidget)
 
 from . import __version__, common, gamecfg, health, i18n
@@ -846,136 +846,271 @@ class LibraryPage:
             self.live.setText(f"<span style='color:{P['MUTED']}'>{T('Nessun gioco sta disegnando frame.')}</span>")
 
 
+def profile_candidates():
+    """Giochi che si possono scegliere per un profilo, senza scrivere niente: [(etichetta, nome, match)].
+
+    Prima quelli già giocati (lo storico ha il nome esatto del processo), poi la libreria:
+    Steam per appid, Lutris/Heroic per nome dell'eseguibile, rilevati per nome del processo."""
+    out, seen = [], set()
+
+    def add(label, name, match):
+        if match and match.lower() not in seen:
+            seen.add(match.lower())
+            out.append((label, name, match))
+    try:
+        con = sqlite3.connect(common.DB_PATH, timeout=3)
+        rows = con.execute("SELECT game, appid, MAX(start) FROM sessions GROUP BY game ORDER BY MAX(start) DESC").fetchall()
+    except sqlite3.Error:
+        rows = []
+    known = {}
+    try:
+        from . import launchers
+        known = launchers.load_known()
+    except Exception:
+        pass
+    steam_names = {k[6:]: g.get("name") for k, g in known.items() if k.startswith("steam:")}
+    for game, appid, last in rows:
+        if game in ("vkcube",):
+            continue
+        name = steam_names.get(appid or "") or game_title(game)
+        match = f"appid:{appid}" if (appid or "").isdigit() else game
+        add(T("{n} · giocato il {d}", n=name, d=time.strftime('%d/%m', time.localtime(last))), name, match)
+    for k, g in sorted(known.items(), key=lambda kv: kv[1].get("name", "").lower()):
+        name = g.get("name") or k
+        if k.startswith("steam:"):
+            add(f"{name} · Steam", name, f"appid:{k[6:]}")
+        elif g.get("process"):
+            add(f"{name} · {T(g.get('store', ''))}", name, g["process"])
+        elif g.get("exe"):
+            add(f"{name} · {T(g.get('store', ''))}", name, os.path.basename(g["exe"]))
+    return out
+
+
+# campi del profilo nella pagina Profili: (chiave, spiegazione) per gruppo
+PROFILE_GROUPS = [
+    ("Prestazioni", "Quanto lavora la scheda mentre il gioco è aperto. Tutto torna normale quando lo chiudi.", [
+        ("fps_limit", "«globale» usa il limite della pagina FPS e upscaling, «nessuno» lo toglie."),
+        ("gpu_max", "tetto del clock GPU mentre il gioco è aperto. Più basso = meno calore, spesso senza perdere "
+                    "FPS nei giochi leggeri o già limitati."),
+        ("cpu_max", "tetto di frequenza della CPU mentre il gioco è aperto: «globale» usa quello della pagina "
+                    "Scheda. Serve cpufreq (pagina Scheda)."),
+        ("heat_guard", "se la CPU supera la soglia, il limite FPS scende di 10 ogni 20 s; risale quando la CPU "
+                       "torna 8°C sotto."),
+        ("upscale", "risoluzione ridotta e ingrandita con FSR 1. Serve il gioco collegato (pagina Giochi); vale "
+                    "dal prossimo avvio."),
+    ]),
+    ("Schermo e overlay", "Come appare il gioco e cosa vedi sopra.", [
+        ("vrr", "accende FreeSync solo per questo gioco. Su molti monitor lo schermo diventa nero per un attimo "
+                "all'avvio e alla chiusura."),
+        ("hud", "cambiano l'overlay solo per questo gioco, al posto delle impostazioni della pagina Overlay."),
+        ("hud_position", None),
+        ("hud_style", None),
+    ]),
+]
+
+
 class ProfilesPage:
-    COLS = ["Nome", "Riconosci (processo o appid:ID)"] + [f[1] for f in common.PROFILE_FIELDS] + ["Note"]
+    """Profili per gioco: elenco a sinistra, impostazioni del profilo scelto a destra.
+    Tutto con menu a tendina e salvataggio automatico (come il pannello Shift+F2)."""
 
     def __init__(self, win):
         self.win = win
-        self.w, lay = page(T("Profili per gioco"), T("Quando un gioco parte, il suo profilo imposta limite FPS, clock GPU, "
-                           "VRR, protezione calore e overlay. Alla chiusura torna tutto normale. "
-                           "Puoi modificarli anche in gioco con Shift+F2."))
-        c = Card(T("I tuoi profili"), T("Una riga per gioco. «Salva» rende effettive le modifiche: se il gioco è "
-                                        "aperto valgono subito, tranne l'upscaling (dal prossimo avvio)."))
-        self.table = QTableWidget(0, len(self.COLS))
-        self.table.setHorizontalHeaderLabels([T(c) for c in self.COLS])
-        hh = self.table.horizontalHeader()
-        hh.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(len(self.COLS) - 1, QHeaderView.ResizeMode.Stretch)
-        self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(40)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        c.lay.addWidget(self.table)
-        btns = QHBoxLayout()
-        for text, fn, obj in (("Aggiungi", self.add, None), ("Dal gioco in corso", self.add_current, None),
-                              ("Elimina", self.delete, "danger"), ("Salva", self.save, "primary")):
-            b = QPushButton(T(text))
-            if obj:
-                b.setObjectName(obj)
-            b.clicked.connect(fn)
-            btns.addWidget(b)
-        btns.addStretch()
-        c.lay.addLayout(btns)
-        lay.addWidget(c)
+        self.loading = False
+        self.cfg_mtime = 0
+        self.w, lay = page(T("Profili per gioco"), T("Quando un gioco parte, il suo profilo imposta limite FPS, "
+                           "clock GPU e CPU, VRR, protezione calore e overlay. Alla chiusura torna tutto normale. "
+                           "Ogni modifica si salva da sola e vale subito, anche a gioco aperto."))
+        body = QHBoxLayout()
+        body.setSpacing(12)
 
-        h = Card(T("Cosa fa ogni colonna"))
-        h.lay.addWidget(label("<br>".join(
-            f"<b style='color:{P['TEXT']}'>{T(k)}</b> — {T(v)}" for k, v in (
-                ("Riconosci", "come trovare il gioco: il nome del processo (per esempio HytaleClient) oppure "
-                              "appid:NUMERO per Steam. «Dal gioco in corso» lo compila da solo."),
-                ("Limite FPS", "«globale» usa il limite della pagina FPS e upscaling, «nessuno» lo toglie."),
-                ("Clock GPU max", "tetto del clock GPU mentre il gioco è aperto. Più basso = meno calore, "
-                                  "spesso senza perdere FPS nei giochi leggeri o già limitati."),
-                ("VRR", "accende FreeSync solo per questo gioco. Su molti monitor lo schermo diventa nero per un "
-                        "attimo all'avvio e alla chiusura."),
-                ("Protezione calore", "se la CPU supera la soglia, il limite FPS scende di 10 ogni 20 s; "
-                                      "risale quando la CPU torna 8°C sotto."),
-                ("Overlay, Posizione overlay, Stile overlay", "cambiano l'overlay solo per questo gioco, "
-                                                               "al posto delle impostazioni della pagina Overlay."),
-                ("Upscaling FSR", "risoluzione ridotta e ingrandita con FSR 1. Serve il gioco collegato "
-                                  "(pagina Giochi); vale dal prossimo avvio."),
-                ("Frequenza CPU max", "tetto di frequenza della CPU mentre il gioco è aperto: «globale» usa quello "
-                                      "della pagina Scheda. Serve cpufreq (pagina Scheda)."))
-        ), 9.5, P["MUTED"], wrap=True))
-        lay.addWidget(h)
+        left = Card(T("I tuoi profili"))
+        left.setFixedWidth(320)
+        left.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        self.add_combo = QComboBox()
+        self.add_combo.activated.connect(self.add_from_combo)
+        left.lay.addWidget(self.add_combo)
+        self.plist = QListWidget()
+        self.plist.setObjectName("items")
+        self.plist.setMinimumHeight(360)
+        self.plist.currentRowChanged.connect(self.show_profile)
+        left.lay.addWidget(self.plist)
+        self.del_btn = QPushButton(T("Elimina profilo"))
+        self.del_btn.setObjectName("danger")
+        self.del_btn.clicked.connect(self.delete)
+        left.lay.addWidget(self.del_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        body.addWidget(left, 0, Qt.AlignmentFlag.AlignTop)
+
+        self.right = QVBoxLayout()
+        self.right.setSpacing(12)
+        self.empty = Card(T("Nessun profilo scelto"), T("Scegli un gioco dal menu «Aggiungi un gioco…» a sinistra: "
+                                                         "il profilo nasce con le impostazioni globali e le cambi qui."))
+        self.right.addWidget(self.empty)
+
+        self.gcard = Card(T("Gioco"))
+        self.gname = label("", 15, bold=True)
+        self.gcard.lay.addWidget(self.gname)
+        self.match = QComboBox()
+        self.match.setMinimumWidth(260)
+        self.match.activated.connect(self.change_match)
+        self.gcard.lay.addWidget(row(T("Riconosciuto da"), self.match))
+        self.gcard.lay.addWidget(label(T("Il gioco a cui si applica il profilo. Di solito non serve cambiarlo."),
+                                       8.5, P["DIM"], wrap=True))
+        self.right.addWidget(self.gcard)
+
+        self.fields = {}
+        meta = {f[0]: f for f in common.PROFILE_FIELDS}
+        self.cards = [self.gcard]
+        for title, sub, keys in PROFILE_GROUPS:
+            c = Card(T(title), T(sub))
+            for key, hint in keys:
+                _k, lab, values, fmt = meta[key]
+                cb = QComboBox()
+                cb.setMinimumWidth(200)
+                for v in values:
+                    cb.addItem(fmt(v, {}), v)
+                cb.activated.connect(lambda _i, k=key, w=cb: self.set_field(k, w.currentData()))
+                self.fields[key] = cb
+                h = hint and T(hint)
+                c.lay.addWidget(row(T(lab), cb, h and h[0].upper() + h[1:]))
+            self.cards.append(c)
+            self.right.addWidget(c)
+        self.right.addStretch()
+        body.addLayout(self.right, 1)
+        lay.addLayout(body)
         lay.addStretch()
-        self.extra = []  # campi del profilo non mostrati in tabella, da conservare
         self.load()
 
-    def load(self):
-        profs = common.load_config()["profiles"]
-        self.table.setRowCount(0)
-        self.extra = []
-        for p in profs:
-            self.add_row(p)
-        QTimer.singleShot(0, self.fit_table)
+    # ------------------------------------------------------------ dati
+    def profiles(self):
+        return common.load_config()["profiles"]
 
-    def add_row(self, p):
-        r = self.table.rowCount()
-        self.table.insertRow(r)
-        self.table.setItem(r, 0, QTableWidgetItem(p.get("name", "")))
-        self.table.setItem(r, 1, QTableWidgetItem(p.get("match", "")))
-        for i, (key, _label, values, fmt) in enumerate(common.PROFILE_FIELDS):
-            cb = QComboBox()
-            for v in values:
-                cb.addItem(fmt(v, {}), v)
-            cur = p.get(key, common.FIELD_DEFAULT[key])
-            idx = values.index(cur) if cur in values else 0
-            cb.setCurrentIndex(idx)
-            self.table.setCellWidget(r, 2 + i, cb)
-        self.table.setItem(r, len(self.COLS) - 1, QTableWidgetItem(p.get("notes", "")))
-        self.fit_table()
-        known = {"name", "match", "notes"} | {f[0] for f in common.PROFILE_FIELDS}
-        self.extra.append({k: v for k, v in p.items() if k not in known})
+    def current(self):
+        i = self.plist.currentRow()
+        ps = self.profiles()
+        return ps[i] if 0 <= i < len(ps) else None
 
-    def fit_table(self):
-        """Tabella alta quanto le sue righe: niente spazio vuoto nella card."""
-        t = self.table
-        h = t.horizontalHeader().height() + t.rowCount() * t.verticalHeader().defaultSectionSize() + 4
-        if t.horizontalScrollBar().isVisible() or t.horizontalHeader().length() > t.viewport().width():
-            h += t.horizontalScrollBar().sizeHint().height()
-        t.setFixedHeight(max(h, 90))
-
-    def add(self):
-        self.add_row({"name": T("Nuovo gioco"), "match": ""})
-
-    def add_current(self):
+    def load(self, select=None):
+        """Ricarica elenco e menu; select = nome del profilo da mostrare."""
+        self.loading = True
+        keep = select or (self.current() or {}).get("name")
+        ps = self.profiles()
+        self.plist.clear()
+        for p in ps:
+            self.plist.addItem(QListWidgetItem(p.get("name", "?")))
+        self.cands = profile_candidates()
+        used = {str(p.get("match", "")).lower() for p in ps}
+        self.add_combo.clear()
+        self.add_combo.addItem("+  " + T("Aggiungi un gioco…"), None)
         g = common.read_state().get("game")
-        if not g:
-            self.win.toast(T("Nessun gioco in corso."))
+        if g:
+            m = f"appid:{g['appid']}" if g.get("appid") else g["name"]
+            if m.lower() not in used:
+                self.add_combo.addItem(T("{n} · in corso adesso", n=game_title(g["name"])),
+                                       (game_title(g["name"]), m))
+        for lab, name, m in self.cands:
+            if m.lower() not in used:
+                self.add_combo.addItem(lab, (name, m))
+        names = [p.get("name") for p in ps]
+        self.plist.setCurrentRow(names.index(keep) if keep in names else (0 if ps else -1))
+        self.loading = False
+        self.show_profile()
+        try:
+            self.cfg_mtime = os.stat(common.CONF_PATH).st_mtime
+        except OSError:
+            pass
+
+    def show_profile(self, *_):
+        if self.loading:
             return
-        match = f"appid:{g['appid']}" if g.get("appid") else g["name"]
-        self.add_row({"name": g["name"].removesuffix(".exe"), "match": match})
+        p = self.current()
+        self.empty.setVisible(p is None)
+        for c in self.cards:
+            c.setVisible(p is not None)
+        self.del_btn.setEnabled(p is not None)
+        if p is None:
+            return
+        self.loading = True
+        self.gname.setText(p.get("name", ""))
+        m = str(p.get("match", ""))
+        # niente giochi che hanno già un altro profilo: due profili sullo stesso gioco si pestano i piedi
+        taken = {str(x.get("match", "")).lower() for x in self.profiles() if x.get("name") != p.get("name")}
+        self.match.clear()
+        self.match.addItem(m, m)
+        for lab, _name, cm in self.cands:
+            if cm.lower() != m.lower() and cm.lower() not in taken:
+                self.match.addItem(f"{lab}  ({cm})", cm)
+        self.match.setCurrentIndex(0)
+        for key, cb in self.fields.items():
+            cur = p.get(key, common.FIELD_DEFAULT[key])
+            i = cb.findData(cur)
+            if i < 0:   # valore fuori elenco (scritto a mano o via MCP): lo mostro com'è
+                cb.addItem(str(cur), cur)
+                i = cb.count() - 1
+            cb.setCurrentIndex(i)
+        self.loading = False
+
+    # ------------------------------------------------------------ modifiche (salvate subito)
+    def update_profile(self, fn, toast=True):
+        name = (self.current() or {}).get("name")
+        if not name:
+            return
+
+        def upd(c):
+            for p in c["profiles"]:
+                if p.get("name") == name:
+                    fn(p)
+        common.update_config(upd)
+        try:
+            self.cfg_mtime = os.stat(common.CONF_PATH).st_mtime
+        except OSError:
+            pass
+        if toast:
+            self.win.toast(T("Profilo «{n}» salvato.", n=name))
+
+    def set_field(self, key, value):
+        if not self.loading:
+            self.update_profile(lambda p: p.__setitem__(key, value))
+
+    def change_match(self, *_):
+        m = self.match.currentData()
+        if self.loading or not m:
+            return
+        self.update_profile(lambda p: p.__setitem__("match", m))
+        self.load()
+
+    def add_from_combo(self, *_):
+        data = self.add_combo.currentData()
+        if not data:
+            return
+        name, match = data
+        names = {p.get("name") for p in self.profiles()}
+        base, n = name, 2
+        while name in names:
+            name, n = f"{base} {n}", n + 1
+        common.update_config(lambda c: c["profiles"].append({"name": name, "match": match}))
+        self.win.toast(T("Profilo «{n}» creato: cambia le impostazioni qui a destra.", n=name))
+        self.load(select=name)
 
     def delete(self):
-        for r in sorted({i.row() for i in self.table.selectedIndexes()}, reverse=True):
-            self.table.removeRow(r)
-            if r < len(self.extra):
-                self.extra.pop(r)
-        self.fit_table()
-
-    def save(self):
-        profs = []
-        for r in range(self.table.rowCount()):
-            def text(c, r=r):
-                it = self.table.item(r, c)
-                return it.text().strip() if it else ""
-            name, match = text(0), text(1)
-            if not name or not match:
-                continue
-            p = dict(self.extra[r]) if r < len(self.extra) else {}
-            p.update(name=name, match=match)
-            for i, (key, *_rest) in enumerate(common.PROFILE_FIELDS):
-                p[key] = self.table.cellWidget(r, 2 + i).currentData()
-            notes = text(len(self.COLS) - 1)
-            if notes:
-                p["notes"] = notes
-            profs.append(p)
-        common.update_config(lambda c: c.update(profiles=profs))
-        self.win.toast(T("{n} profili salvati.", n=len(profs)))
+        p = self.current()
+        if not p:
+            return
+        if QMessageBox.question(self.w, "BC-250", T("Elimino il profilo «{n}»? Il gioco userà le impostazioni "
+                                                    "globali.", n=p.get("name"))) != QMessageBox.StandardButton.Yes:
+            return
+        name = p.get("name")
+        common.update_config(lambda c: c.update(profiles=[x for x in c["profiles"] if x.get("name") != name]))
+        self.load()
 
     def refresh(self, st):
-        pass
+        # profilo cambiato da Shift+F2 o dall'MCP: aggiorna (non mentre un menu è aperto)
+        try:
+            m = os.stat(common.CONF_PATH).st_mtime
+        except OSError:
+            return
+        if m != self.cfg_mtime and not any(cb.view().isVisible() for cb in
+                                           [self.add_combo, self.match, *self.fields.values()]):
+            self.load()
 
 
 class BoardPage:

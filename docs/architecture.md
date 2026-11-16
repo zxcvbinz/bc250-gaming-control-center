@@ -75,8 +75,9 @@ shared with the app's preview, so the preview is exactly what you get in game.
 
 ## App (`bc250-control`)
 
-PyQt6, Fusion style with its own dark palette. Pages: Dashboard, Games, FPS & engine, Profiles, Overlay,
-Display, Health, History, Alerts. A search box at the top of the sidebar indexes every page, card, setting
+PyQt6, Fusion style with its own dark palette and bundled fonts. Pages, grouped in the menu: Monitoring
+(Overview, History), Games (Games, Profiles, Overlay), Performance (FPS & upscaling, Board, Display), System
+(Health & alerts). A search box at the top of the sidebar indexes every page, card, setting
 and game; picking a result opens the page, scrolls to it and highlights the card. It refreshes the visible page once per second from `state.json`, and writes only
 `config.json`.
 

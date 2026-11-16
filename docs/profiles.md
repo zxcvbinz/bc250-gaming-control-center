@@ -7,7 +7,8 @@ restores the defaults when it stops.
 
 Edit profiles in three places:
 
-- **Profiles** page in the app (table, *Add*, *From running game*, *Save*);
+- **Profiles** page in the app: pick a game from *Add a game…* (games you played, then your Steam, Lutris
+  and Heroic library), then set every field from a drop-down. Changes save themselves and apply at once;
 - in game with the **Shift+F2** panel (arrow keys, saved instantly);
 - through the MCP tool `save_profile`.
 
@@ -79,6 +80,6 @@ starts and closes. The **Display** page shows each output and lets you set VRR a
 
 ## GPU clock
 
-Without a profile, the governor range is `gpu_default` (default 1000–1750 MHz, editable in **Profiles →
-Default GPU clock**). A profile with `gpu_max` narrows or widens it while the game runs. The governor
+Without a profile, the governor range is `gpu_default` (default 1000–1750 MHz, editable in **Board →
+GPU clock**). A profile with `gpu_max` narrows or widens it while the game runs. The governor
 still throttles on temperature by itself.
